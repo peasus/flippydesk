@@ -15,6 +15,8 @@
   const scoreNumEl = scoreEl.querySelector('.num');
   const hangEl = scoreEl.querySelector('.hang');
   const muteEl = document.getElementById('mute');
+  const toastEl = document.getElementById('toast');
+  const unlockEl = document.getElementById('unlock');
 
   const INK = '#2a2733';
   const LW = 0.011;              // outline width, in meters
@@ -307,6 +309,7 @@
   function mug() {
     const color = pick(['#e66b6b', '#f2c14e', '#6b8fe6', '#f4f4f6', '#7cc58f', '#b48be0']);
     const stripe = chance(0.5);
+    const brand = chance(0.4) ? pick(BRANDS) : null;
     return {
       w: 0.2,
       place(x, y) {
@@ -324,7 +327,8 @@
         const b = addBody(x - 0.02, y, [R(-0.07, -0.16, 0.14, 0.16), R(0.07, -0.13, 0.045, 0.09, { d: 0.3 })], () => {
           handle();
           rrect(-0.07, -0.16, 0.14, 0.16, 0.018, color);
-          if (stripe) rrect(-0.07, -0.11, 0.14, 0.025, 0, 'rgba(255,255,255,0.55)', false);
+          if (brand) label(brand.name, 0, -0.075, 0.022, brand.color === color ? '#fff' : brand.color);
+          else if (stripe) rrect(-0.07, -0.11, 0.14, 0.025, 0, 'rgba(255,255,255,0.55)', false);
           if (state === 'ready' && b.coffee > 0) {
             ctx.globalAlpha = 0.5;
             for (let i = -1; i <= 1; i++) {
@@ -675,6 +679,207 @@
     };
   }
 
+  // ---------- work swag ----------
+  // Merch from companies that don't exist. Most of it unlocks as you flip.
+
+  const BRANDS = [
+    { name: 'SYNERGEX', color: '#6b8fe6' },
+    { name: 'Cloudloaf', color: '#f08a4b' },
+    { name: 'PIVOTLY', color: '#7cc58f' },
+    { name: 'Q-Bagel', color: '#b48be0' },
+    { name: 'HYPERLINQ', color: '#e66b6b' },
+    { name: 'Blockchair', color: '#4fb3bf' },
+    { name: 'Dataduck', color: '#f2c14e' },
+  ];
+
+  function label(text, x, y, size, color, weight = 800) {
+    ctx.font = `${weight} ${size}px ui-rounded, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+    ctx.textAlign = 'start';
+  }
+
+  function stressBall() {
+    const brand = pick(BRANDS);
+    return {
+      w: 0.12,
+      place(x, y) {
+        addBody(x, y, [{ x: 0, y: -0.05, r: 0.05 }], () => {
+          ellipse(0, -0.05, 0.05, 0.05, brand.color);
+          ellipse(-0.017, -0.068, 0.015, 0.01, 'rgba(255,255,255,0.45)', false);
+          label(brand.name.slice(0, 4), 0, -0.04, 0.022, '#fff');
+        }, { kind: 'ball', restitution: 0.75, density: 0.4 });
+      },
+    };
+  }
+
+  function waterBottle() {
+    const brand = pick(BRANDS);
+    return {
+      w: 0.09,
+      place(x, y) {
+        addBody(x, y, [R(-0.035, -0.25, 0.07, 0.25)], () => {
+          rrect(-0.025, -0.28, 0.05, 0.04, 0.01, INK);
+          rrect(-0.035, -0.25, 0.07, 0.25, 0.025, brand.color);
+          rrect(-0.035, -0.16, 0.07, 0.06, 0, '#fff', false);
+          ctx.save();
+          ctx.translate(0.004, -0.13);
+          ctx.rotate(-Math.PI / 2);
+          label(brand.name, 0, 0.004, 0.018, brand.color);
+          ctx.restore();
+        }, { kind: 'bottle', density: 0.6 });
+      },
+    };
+  }
+
+  function patentAward() {
+    const no = `No. 11,${randInt(100, 999)},${randInt(100, 999)}`;
+    const title = pick(['Method for Synergy', 'Recursive Meeting', 'Cloud-Based Stapler', 'Agile Toaster', 'Self-Scheduling Sync']);
+    const block = R(-0.085, -0.2, 0.17, 0.2);
+    const draw = (part) => {
+      ctx.save();
+      if (part) {
+        ctx.beginPath();
+        ctx.rect(part < 0 ? -0.1 : 0.005, -0.25, 0.1, 0.3);
+        ctx.clip();
+      }
+      rrect(-0.085, -0.2, 0.17, 0.2, 0.012, 'rgba(205,232,250,0.65)');
+      ellipse(0, -0.15, 0.025, 0.025, '#e0b84a');
+      label('U.S. PATENT', 0, -0.098, 0.017, INK);
+      label(no, 0, -0.075, 0.014, INK, 600);
+      label(title, 0, -0.05, 0.012, INK, 600);
+      line(-0.06, -0.03, 0.06, -0.03, 'rgba(42,39,51,0.35)', 0.004);
+      ellipse(-0.06, -0.17, 0.012, 0.03, 'rgba(255,255,255,0.5)', false);
+      ctx.restore();
+    };
+    return {
+      w: 0.19,
+      place(x, y) {
+        const b = addBody(x, y, [block], () => draw(0), { kind: 'acrylic', density: 1.6 });
+        b.breakable = 'acrylic';
+        b.shatter = () => {
+          spawnShards(b, 0, -0.1, 4, 'rgba(205,232,250,0.8)');
+          splitBody(b, [
+            { parts: [R(-0.085, -0.2, 0.085, 0.2)], draw: () => draw(-1) },
+            { parts: [R(0, -0.2, 0.085, 0.2)], draw: () => draw(1) },
+          ]);
+        };
+      },
+    };
+  }
+
+  function snowGlobe() {
+    const brand = pick(BRANDS);
+    const flakes = Array.from({ length: 12 }, () => [rand(-0.06, 0.06), rand(-0.19, -0.07)]);
+    return {
+      w: 0.18,
+      place(x, y) {
+        const drawBase = () => {
+          rrect(-0.075, -0.045, 0.15, 0.045, 0.012, '#8a5a3b');
+          label(brand.name, 0, -0.016, 0.017, '#f2e2c4');
+        };
+        const b = addBody(x, y, [R(-0.075, -0.045, 0.15, 0.045), { x: 0, y: -0.125, r: 0.085 }], () => {
+          ellipse(0, -0.125, 0.085, 0.085, 'rgba(205,232,250,0.55)');
+          rrect(-0.03, -0.1, 0.06, 0.05, 0.01, brand.color);
+          poly([[-0.035, -0.1], [0, -0.13], [0.035, -0.1]], brand.color);
+          ctx.fillStyle = '#fff';
+          for (const [fx, fy] of flakes) {
+            ctx.beginPath();
+            ctx.arc(fx, fy + Math.sin(clock + fx * 40) * 0.006, 0.005, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ellipse(-0.035, -0.16, 0.015, 0.025, 'rgba(255,255,255,0.6)', false);
+          drawBase();
+        }, { kind: 'snowglobe' });
+        b.breakable = 'snowglobe';
+        b.shatter = () => {
+          const c = b.getWorldPoint(V(0, -0.125));
+          const v = b.getLinearVelocity();
+          for (let i = 0; i < 30; i++) {
+            const kind = i % 3 ? WATER : SNOW;
+            drops.push(Object.assign({ x: c.x, y: c.y, vx: v.x + rand(-2.5, 2.5), vy: v.y + rand(-3, 0.5), r: rand(0.006, 0.016) }, kind));
+          }
+          spawnShards(b, 0, -0.125, 5, 'rgba(205,232,250,0.85)');
+          splitBody(b, [{ parts: [R(-0.075, -0.045, 0.15, 0.045)], draw: drawBase }]);
+        };
+      },
+    };
+  }
+
+  function monolith() {
+    const brand = pick(BRANDS);
+    const years = pick([5, 10, 15, 20]);
+    return {
+      w: 0.15,
+      place(x, y) {
+        addBody(x, y, [R(-0.06, -0.36, 0.12, 0.36)], () => {
+          rrect(-0.06, -0.36, 0.12, 0.36, 0.008, '#1d1c22');
+          poly([[-0.06, -0.36], [-0.02, -0.36], [-0.06, -0.2]], 'rgba(255,255,255,0.08)', false);
+          label(String(years), 0, -0.22, 0.075, '#e0b84a');
+          label('YEARS', 0, -0.185, 0.02, '#e0b84a');
+          label(brand.name, 0, -0.06, 0.016, '#e0b84a', 600);
+        }, { kind: 'monolith', density: 3, restitution: 0.05 });
+      },
+    };
+  }
+
+  function trophy() {
+    return {
+      w: 0.17,
+      place(x, y) {
+        addBody(x, y, [R(-0.07, -0.05, 0.14, 0.05), R(-0.015, -0.12, 0.03, 0.07), { pts: [[-0.08, -0.26], [0.08, -0.26], [0.04, -0.12], [-0.04, -0.12]] }], () => {
+          rrect(-0.07, -0.05, 0.14, 0.05, 0.008, '#3b3a44');
+          label('DESK FLIPPER', 0, -0.02, 0.013, '#e0b84a');
+          rrect(-0.015, -0.13, 0.03, 0.08, 0.005, '#e0b84a');
+          for (const sx of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(sx * 0.075, -0.21, 0.03, 0.035, 0, 0, Math.PI * 2);
+            ctx.lineWidth = 0.022;
+            ctx.strokeStyle = INK;
+            ctx.stroke();
+            ctx.lineWidth = 0.01;
+            ctx.strokeStyle = '#e0b84a';
+            ctx.stroke();
+          }
+          poly([[-0.08, -0.26], [0.08, -0.26], [0.04, -0.12], [-0.04, -0.12]], '#f2c94e');
+          label('★', 0, -0.18, 0.05, '#fff6c8');
+        }, { kind: 'trophy', density: 2 });
+      },
+    };
+  }
+
+  // Swag unlocks as the flip count grows; each new item is guaranteed a spot
+  // on the next desk.
+  const UNLOCKS = [
+    { at: 3, name: 'Stress ball', make: stressBall },
+    { at: 6, name: 'Branded water bottle', make: waterBottle },
+    { at: 10, name: 'Patent award', make: patentAward },
+    { at: 15, name: 'Snow globe', make: snowGlobe },
+    { at: 25, name: 'Anniversary monolith', make: monolith },
+    { at: 40, name: 'Desk Flipper trophy', make: trophy },
+  ];
+  let freshUnlock = null;
+
+  function unlockedSwag() {
+    return UNLOCKS.filter((u) => flips >= u.at).map((u) => u.make);
+  }
+
+  function nextUnlock() {
+    return UNLOCKS.find((u) => flips < u.at);
+  }
+
+  function checkUnlock() {
+    const u = UNLOCKS.find((x) => x.at === flips);
+    if (!u) return;
+    freshUnlock = u;
+    toastEl.textContent = `Unlocked: ${u.name}`;
+    toastEl.classList.remove('show');
+    void toastEl.offsetWidth;
+    toastEl.classList.add('show');
+    sfx.ding(true);
+  }
+
   const COMPUTERS = [
     () => [monitor(), keyboard(), mouse()],
     () => [monitor(), keyboard(), mouse()],
@@ -693,9 +898,13 @@
     if (chance(0.85)) extras.push(chance(0.5) ? bookStack() : booksUpright());
     if (chance(0.85)) extras.push(plant());
     const kitty = chance(0.7) ? cat() : null;
-    for (const make of shuffle(EXTRAS.slice()).slice(0, randInt(1, 4))) extras.push(make());
+    for (const make of shuffle(EXTRAS.concat(unlockedSwag(), unlockedSwag())).slice(0, randInt(1, 4))) extras.push(make());
     shuffle(extras);
     if (kitty) extras.unshift(kitty);  // the fit below drops from the end
+    if (freshUnlock) {
+      extras.unshift(freshUnlock.make());
+      freshUnlock = null;
+    }
 
     const GAP = 0.015;
     const widthOf = (list) => list.reduce((s, it) => s + it.w, 0) + GAP * (list.length - 1);
@@ -1032,6 +1241,7 @@
     idleT = 0;
     flips++;
     try { localStorage.setItem('flippydesk.flips', String(flips)); } catch (e) { /* storage blocked */ }
+    checkUnlock();
     score = 0;
     hang = 0;
     groundT = 0;
@@ -1254,7 +1464,7 @@
   const GLASS = 'rgba(214,236,250,0.9)';
   const GRACE = 0.25;        // ignore the hits from the launch itself
   const MAX_SHARDS = 40;
-  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250 };
+  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350 };
 
   function makeScreen(b, x, y, w, h) {
     b.breakable = 'screen';
@@ -1315,13 +1525,15 @@
       else if (b.breakable === 'lamp' && dv > 2.6) breakApart(b, 'lamp', 'lamp smashed');
       else if (b.breakable === 'mug' && dv > 4) breakApart(b, 'mug', 'mug smashed');
       else if (b.breakable === 'pot' && dv > 3.5) breakApart(b, 'pot', 'pot smashed');
+      else if (b.breakable === 'acrylic' && dv > 4) breakApart(b, 'acrylic', 'patent revoked');
+      else if (b.breakable === 'snowglobe' && dv > 3) breakApart(b, 'snowglobe', 'snow globe smashed');
     }
   }
 
   function breakApart(b, kind, label) {
     const c = b.getWorldCenter();
     b.shatter();
-    if (kind === 'lamp') sfx.shatter(0.7); else sfx.smash();
+    if (kind === 'lamp' || kind === 'snowglobe' || kind === 'acrylic') sfx.shatter(0.7); else sfx.smash();
     addPoints(POINTS[kind], label, c.x, c.y);
     shake = Math.min(1, shake + 0.2);
   }
@@ -1439,6 +1651,8 @@
 
   const COFFEE = { color: '#6b3f22', stain: 'rgba(92,55,30,0.55)' };
   const DIRT = { color: '#5a3d2b', stain: 'rgba(74,50,34,0.9)' };
+  const WATER = { color: 'rgba(120,190,240,0.9)', stain: 'rgba(120,190,240,0.4)' };
+  const SNOW = { color: '#ffffff', stain: 'rgba(255,255,255,0.85)' };
 
   function spillDirt(b, n) {
     const c = b.getWorldPoint(V(0, -0.1));
@@ -1498,6 +1712,8 @@
       best ? `best ${best.toLocaleString()}` : '',
       flips ? `${flips} flipped` : '',
     ].filter(Boolean).join(' · ');
+    const next = nextUnlock();
+    unlockEl.textContent = next && state === 'ready' ? `next swag in ${next.at - flips} flip${next.at - flips === 1 ? '' : 's'}` : '';
   }
 
   function finishRound() {
