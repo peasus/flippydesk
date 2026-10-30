@@ -178,6 +178,15 @@
     for (const x of peds) parts.push(R(x, -legH, 0.45, legH));
     const legColor = glassy ? metal : wood.side;
     const drawers = peds.map(() => randInt(2, 3));
+    const slots = [];
+    peds.forEach((x, i) => {
+      const dh = (legH - 0.06) / drawers[i];
+      for (let k = 0; k < drawers[i]; k++) slots.push({ x: x + 0.03, y: -legH + 0.03 + k * dh, w: 0.39, h: dh - 0.025, out: false });
+    });
+    const drawDrawer = (d) => {
+      rrect(d.x, d.y, d.w, d.h, 0.012, wood.top);
+      rrect(d.x + 0.14, d.y + d.h / 2 - 0.0125, 0.11, 0.025, 0.012, handle);
+    };
     const handle = pick(['#d8b25a', '#c9ccd3', INK]);
 
     desk = addBody(cx, floorY, parts, () => {
@@ -197,14 +206,11 @@
       for (const x of legs) rrect(x, -legH - 0.01, 0.07, legH + 0.01, 0.01, legColor);
       peds.forEach((x, i) => {
         rrect(x, -legH - 0.01, 0.45, legH + 0.01, 0.01, wood.side);
-        const n = drawers[i];
-        const dh = (legH - 0.06) / n;
-        for (let k = 0; k < n; k++) {
-          const y = -legH + 0.03 + k * dh;
-          rrect(x + 0.03, y, 0.39, dh - 0.025, 0.012, wood.top);
-          rrect(x + 0.17, y + dh / 2 - 0.025, 0.11, 0.025, 0.012, handle);
-        }
       });
+      for (const d of slots) {
+        if (d.out) rrect(d.x, d.y, d.w, d.h, 0.012, 'rgba(20,18,26,0.75)');
+        else drawDrawer(d);
+      }
       rrect(-half, top, DESK_W, DESK_TOP_T, 0.015, wood.top);
       ctx.save();
       ctx.beginPath();
@@ -219,7 +225,45 @@
         ellipse(half - 0.385, top + DESK_TOP_T + 0.02, 0.01, 0.01, '#7cc58f', false);
         ellipse(half - 0.325, top + DESK_TOP_T + 0.02, 0.01, 0.01, '#e66b6b', false);
       }
+      for (const c of desk.splits) {
+        ctx.beginPath();
+        ctx.moveTo(c[0][0], c[0][1]);
+        for (const pt of c) ctx.lineTo(pt[0], pt[1]);
+        ctx.strokeStyle = 'rgba(20,18,26,0.8)';
+        ctx.lineWidth = 0.009;
+        ctx.stroke();
+      }
     }, { kind: 'desk', density: 3, friction: 0.7, restitution: 0.1, z: -1 });
+    desk.breakable = 'desk';
+    desk.splits = [];
+    // Pops one drawer out of the desk as its own body.
+    desk.popDrawer = () => {
+      const d = pick(slots.filter((x) => !x.out));
+      if (!d) return false;
+      d.out = true;
+      const pos = desk.getPosition();
+      const nb = addBody(pos.x, pos.y, [R(d.x, d.y, d.w, d.h)], () => drawDrawer(d), { angle: desk.getAngle(), kind: 'drawer', density: 0.8 });
+      const c = nb.getWorldCenter();
+      const v = desk.getLinearVelocityFromWorldPoint(c);
+      nb.setLinearVelocity(V(v.x + rand(-2, 2), v.y + rand(-3, -1)));
+      nb.setAngularVelocity(rand(-6, 6));
+      // Desk drawer junk: paperclips, rubber bands, a lost pen cap.
+      for (let i = 0; i < 12; i++) {
+        drops.push(Object.assign({ x: c.x, y: c.y, vx: v.x + rand(-2, 2), vy: v.y + rand(-3, 0), r: rand(0.006, 0.012) }, pick([CLIP, BAND])));
+      }
+      return true;
+    };
+    // A zigzag crack through the desktop at a random spot.
+    desk.addCrack = () => {
+      let x = rand(-half + 0.15, half - 0.15);
+      const pts = [[x, top]];
+      for (let y = top; y < top + DESK_TOP_T; ) {
+        y = Math.min(top + DESK_TOP_T, y + rand(0.012, 0.025));
+        x += rand(-0.02, 0.02);
+        pts.push([x, y]);
+      }
+      desk.splits.push(pts);
+    };
   }
 
   // ---------- desk items ----------
@@ -754,7 +798,7 @@
     return {
       w: 0.09,
       place(x, y) {
-        addBody(x, y, [R(-0.035, -0.25, 0.07, 0.25)], () => {
+        const b = addBody(x, y, [R(-0.035, -0.25, 0.07, 0.25)], () => {
           rrect(-0.025, -0.28, 0.05, 0.04, 0.01, INK);
           rrect(-0.035, -0.25, 0.07, 0.25, 0.025, brand.color);
           rrect(-0.035, -0.16, 0.07, 0.06, 0, '#fff', false);
@@ -764,6 +808,8 @@
           label(brand.name, 0, 0.004, 0.018, brand.color);
           ctx.restore();
         }, { kind: 'bottle', density: 0.6 });
+        b.spun = 0;
+        b.stillT = 0;
       },
     };
   }
@@ -971,6 +1017,7 @@
     shardCount = 0;
     popups = [];
     cats = [];
+    confetti = [];
     grab = null;
     world.on('post-solve', onPostSolve);
     world.on('begin-contact', onBeginContact);
@@ -1395,7 +1442,9 @@
 
     // Drop sounds when lots start at once, so a big crash doesn't clip.
     function ready() {
-      if (!ac || muted || ac.state !== 'running') return false;
+      // A context that is still starting up queues sounds and plays them
+      // once it runs, so the first flip isn't silent.
+      if (!ac || muted || ac.state === 'closed') return false;
       const now = ac.currentTime;
       recent = recent.filter((t) => now - t < 0.05);
       if (recent.length >= 6) return false;
@@ -1513,16 +1562,46 @@
           t += dur + rand(0.03, 0.09);
         }
       },
+      fanfare() {
+        if (!ready()) return;
+        const notes = [[523, 0, 0.12], [659, 0.12, 0.12], [784, 0.24, 0.12], [1047, 0.36, 0.5]];
+        for (const [f, d, len] of notes) {
+          tone('square', f, 0.07, len, d);
+          tone('sawtooth', f / 2, 0.04, len, d);
+        }
+        burst('highpass', 4000, 0.5, 0.12, 0.6, 0.36);
+      },
       squeak(v) {
         if (!ready()) return;
         tone('square', 1500, 0.06 * v + 0.02, 0.09, 0, 2300);
         tone('square', 2300, 0.05 * v + 0.02, 0.12, 0.08, 1400);
       },
+      // "Mee-ow": a rising then falling voice through a sweeping filter.
       meow() {
         if (!ready()) return;
-        tone('sawtooth', 700, 0.05, 0.12, 0, 1100);
-        tone('sawtooth', 1100, 0.05, 0.25, 0.1, 550);
-        tone('sine', 1400, 0.05, 0.3, 0.05, 900);
+        const t = ac.currentTime + 0.02;
+        const o = ac.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(520, t);
+        o.frequency.linearRampToValueAtTime(780, t + 0.12);
+        o.frequency.linearRampToValueAtTime(720, t + 0.3);
+        o.frequency.linearRampToValueAtTime(430, t + 0.55);
+        const f = ac.createBiquadFilter();
+        f.type = 'bandpass';
+        f.Q.value = 3;
+        f.frequency.setValueAtTime(900, t);
+        f.frequency.linearRampToValueAtTime(2200, t + 0.15);
+        f.frequency.linearRampToValueAtTime(800, t + 0.55);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.35, t + 0.06);
+        g.gain.setValueAtTime(0.35, t + 0.35);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+        o.connect(f);
+        f.connect(g);
+        g.connect(master);
+        o.start(t);
+        o.stop(t + 0.65);
       },
       ding(big) {
         if (!ready()) return;
@@ -1599,6 +1678,7 @@
       if (b.breakable === 'screen') hitScreen(b, dv);
       else if (b.breakable === 'lamp' && dv > 2.6) breakApart(b, 'lamp', 'lamp smashed');
       else if (b.breakable === 'mug' && dv > 4) breakApart(b, 'mug', 'mug smashed');
+      else if (b.breakable === 'desk') hitDesk(b, dv);
       else if (b.breakable === 'pot' && dv > 3.5) breakApart(b, 'pot', 'pot smashed');
       else if (b.breakable === 'acrylic' && dv > 4) breakApart(b, 'acrylic', 'patent revoked');
       else if (b.breakable === 'snowglobe' && dv > 3) breakApart(b, 'snowglobe', 'snow globe smashed');
@@ -1627,6 +1707,20 @@
     } else {
       sfx.crack();
       addPoints(POINTS.crack, 'cracked', c.x, c.y);
+    }
+  }
+
+  function hitDesk(d, dv) {
+    if (dv < 3) return;
+    const c = d.getWorldCenter();
+    if (d.popDrawer()) {
+      sfx.thud(0.8, 0.5);
+      addPoints(100, 'drawer popped', c.x, c.y);
+    }
+    if (dv > 4.5 && d.splits.length < 3) {
+      d.addCrack();
+      sfx.crack();
+      addPoints(200, 'desk cracked', c.x, c.y - 0.3);
     }
   }
 
@@ -1728,6 +1822,8 @@
   const DIRT = { color: '#5a3d2b', stain: 'rgba(74,50,34,0.9)' };
   const WATER = { color: 'rgba(120,190,240,0.9)', stain: 'rgba(120,190,240,0.4)' };
   const SNOW = { color: '#ffffff', stain: 'rgba(255,255,255,0.85)' };
+  const CLIP = { color: '#c9ccd3', stain: 'rgba(201,204,211,0.9)' };
+  const BAND = { color: '#e66b6b', stain: 'rgba(230,107,107,0.8)' };
 
   function spillDirt(b, n) {
     const c = b.getWorldPoint(V(0, -0.1));
@@ -1735,6 +1831,46 @@
     for (let i = 0; i < n; i++) {
       drops.push(Object.assign({ x: c.x + rand(-0.06, 0.06), y: c.y + rand(-0.05, 0.05), vx: v.x + rand(-2, 2), vy: v.y + rand(-2.5, 0.5), r: rand(0.01, 0.022) }, DIRT));
     }
+  }
+
+  // ---------- bottle flip ----------
+  // A water bottle that spins at least once and comes to rest standing up
+  // gets the full celebration.
+
+  let confetti = [];
+
+  function trackBottles(dt) {
+    if (state !== 'flipped') return;
+    for (const b of bodies) {
+      if (b.kind !== 'bottle' || b.celebrated) continue;
+      b.spun += Math.abs(b.getAngularVelocity()) * dt;
+      const a = b.getAngle();
+      const upright = Math.cos(a) > 0.97;
+      const still = b.getLinearVelocity().length() < 0.15 && Math.abs(b.getAngularVelocity()) < 0.3;
+      b.stillT = upright && still ? b.stillT + dt : 0;
+      if (b.spun > 5 && b.stillT > 0.4) {
+        b.celebrated = true;
+        celebrate(b);
+      }
+    }
+  }
+
+  function celebrate(b) {
+    const p = b.getWorldPoint(V(0, -0.25));
+    sfx.fanfare();
+    addPoints(1000, 'BOTTLE FLIP!', p.x, p.y - 0.1);
+    toastEl.textContent = 'Bottle flip!';
+    toastEl.classList.remove('show');
+    void toastEl.offsetWidth;
+    toastEl.classList.add('show');
+    const colors = ['#e66b6b', '#f2c14e', '#6b8fe6', '#7cc58f', '#b48be0', '#f08a4b'];
+    for (let i = 0; i < 70; i++) {
+      const ang = -Math.PI / 2 + rand(-0.9, 0.9);
+      const sp = rand(2.5, 6);
+      confetti.push({ x: p.x, y: p.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, a: rand(0, 6.28), spin: rand(-12, 12), c: pick(colors) });
+    }
+    // Give the reset a moment so you can enjoy it.
+    heldUntil = Math.max(heldUntil, stateT - RESET_AFTER + 2.5);
   }
 
   // ---------- score ----------
@@ -1829,6 +1965,16 @@
     lastDeskSpeed = speed;
 
     trackHang(dt);
+    trackBottles(dt);
+    for (let i = confetti.length - 1; i >= 0; i--) {
+      const c = confetti[i];
+      c.vy += GRAVITY * 0.25 * dt;
+      c.vx *= 0.99;
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      c.a += c.spin * dt;
+      if (c.y > floorY + 0.02) confetti.splice(i, 1);
+    }
 
     // On narrow screens the desk can end up standing on end, leaning on a
     // wall. If it sits there, tip its top back toward the middle.
@@ -2166,6 +2312,14 @@
     ctx.globalAlpha = 1;
     ctx.textAlign = 'start';
 
+    for (const c of confetti) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.a);
+      ctx.fillStyle = c.c;
+      ctx.fillRect(-0.012, -0.006, 0.024, 0.012);
+      ctx.restore();
+    }
     for (const d of drops) {
       ctx.fillStyle = d.color;
       ctx.beginPath();
@@ -2296,6 +2450,8 @@
     get score() { return score; },
     get hang() { return hang; },
     get bodies() { return bodies.length; },
+    celebrate: () => celebrate(desk),
+    get deskInfo() { return { cracks: desk.splits.length, drawers: bodies.filter(b => b.kind === "drawer").length }; },
     set room(name) { room = null; pickRoom(); room.name = name; room.theme = ROOMS[name]; document.body.dataset.room = name; document.documentElement.style.setProperty('--ink', room.theme.ink); },
   };
 
