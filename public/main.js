@@ -930,15 +930,284 @@
     };
   }
 
+  function confBadge() {
+    const brand = pick(BRANDS);
+    const role = pick(['SPEAKER', 'VIP', 'ATTENDEE', 'STAFF', 'THOUGHT LEADER']);
+    return {
+      w: 0.12,
+      place(x, y) {
+        addBody(x, y, [R(-0.05, -0.13, 0.1, 0.13)], () => {
+          ctx.beginPath();
+          ctx.moveTo(-0.03, -0.13);
+          ctx.lineTo(-0.045, -0.2);
+          ctx.lineTo(0.045, -0.2);
+          ctx.lineTo(0.03, -0.13);
+          ctx.strokeStyle = brand.color;
+          ctx.lineWidth = 0.012;
+          ctx.stroke();
+          rrect(-0.05, -0.13, 0.1, 0.13, 0.01, '#ffffff');
+          rrect(-0.05, -0.13, 0.1, 0.035, 0.01, brand.color, false);
+          label(brand.name, 0, -0.103, 0.014, '#fff');
+          label('HELLO', 0, -0.07, 0.013, INK, 600);
+          label(role, 0, -0.03, role.length > 8 ? 0.009 : 0.014, brand.color);
+        }, { kind: 'badge', density: 0.3 });
+      },
+    };
+  }
+
+  function fidgetSpinner() {
+    const brand = pick(BRANDS);
+    const lobes = [0, 1, 2].map((i) => [Math.cos(i * 2.094 - 1.571) * 0.045, Math.sin(i * 2.094 - 1.571) * 0.045 - 0.055]);
+    return {
+      w: 0.13,
+      place(x, y) {
+        const b = addBody(x, y, [{ x: 0, y: -0.055, r: 0.025 }].concat(lobes.map(([lx, ly]) => ({ x: lx, y: ly, r: 0.025 }))), () => {
+          for (const [lx, ly] of lobes) line(0, -0.055, lx, ly, INK, 0.03);
+          for (const [lx, ly] of lobes) line(0, -0.055, lx, ly, brand.color, 0.018);
+          for (const [lx, ly] of lobes) {
+            ellipse(lx, ly, 0.025, 0.025, brand.color);
+            ellipse(lx, ly, 0.012, 0.012, '#c9ccd3');
+          }
+          ellipse(0, -0.055, 0.022, 0.022, '#e0b84a');
+        }, { kind: 'spinner', density: 0.8, restitution: 0.3 });
+        b.setAngularDamping(0.01);
+      },
+    };
+  }
+
+  function decisionBall() {
+    const answers = ['CIRCLE BACK', 'TAKE IT OFFLINE', 'ASK IN Q3', 'SYNERGY SAYS YES', 'PARK IT', 'LET’S ALIGN', 'NEW PROCESS'];
+    let answer = pick(answers);
+    return {
+      w: 0.13,
+      place(x, y) {
+        let b;
+        b = addBody(x, y, [{ x: 0, y: -0.06, r: 0.06 }], () => {
+          ellipse(0, -0.06, 0.06, 0.06, '#1d1c22');
+          ellipse(-0.02, -0.085, 0.015, 0.01, 'rgba(255,255,255,0.3)', false);
+          const spinning = Math.abs(b.getAngularVelocity()) > 1.5;
+          if (spinning && !b.shaken) { b.shaken = true; }
+          if (!spinning && b.shaken) { b.shaken = false; answer = pick(answers); }
+          // the answer window stays upright so it can be read
+          ctx.save();
+          ctx.translate(0, -0.06);
+          ctx.rotate(-b.getAngle());
+          poly([[-0.04, -0.025], [0.04, -0.025], [0, 0.04]], '#3d5fd6', false);
+          const words = spinning ? ['...'] : answer.split(' ');
+          words.forEach((w, i) => label(w, 0, -0.012 + i * 0.012 - (words.length - 1) * 0.004, 0.0095, '#dce6ff'));
+          ctx.restore();
+        }, { kind: 'ball', density: 0.9, restitution: 0.35 });
+      },
+    };
+  }
+
+  function plaque() {
+    const month = pick(['JANUARY', 'MARCH', 'MAY', 'JULY', 'SEPTEMBER', 'NOVEMBER', 'Q4 (AGAIN)']);
+    const hue = rand(0, 360);
+    return {
+      w: 0.18,
+      place(x, y) {
+        addBody(x, y, [R(-0.08, -0.22, 0.16, 0.22)], () => {
+          rrect(-0.08, -0.22, 0.16, 0.22, 0.012, '#8a5a3b');
+          rrect(-0.065, -0.205, 0.13, 0.11, 0.006, '#e0b84a');
+          ellipse(0, -0.16, 0.022, 0.022, hsl(hue, 45, 70));
+          rrect(-0.035, -0.14, 0.07, 0.04, 0.02, hsl(hue + 180, 40, 50), false);
+          label('EMPLOYEE', 0, -0.07, 0.015, '#f2e2c4');
+          label('OF THE MONTH', 0, -0.05, 0.012, '#f2e2c4');
+          label(month, 0, -0.025, 0.011, '#e0b84a', 600);
+        }, { kind: 'plaque', density: 1.4 });
+      },
+    };
+  }
+
+  function lavaLamp() {
+    const brand = pick(BRANDS);
+    const goo = brand.color;
+    const blobs = Array.from({ length: 4 }, (_, i) => [rand(-0.01, 0.01), rand(0.01, 0.02), rand(0, 6.28), 0.3 + i * 0.15]);
+    const drawBase = () => {
+      poly([[-0.03, -0.07], [0.03, -0.07], [0.055, 0], [-0.055, 0]], '#9aa0aa');
+      label(brand.name.slice(0, 6), 0, -0.02, 0.012, '#fff');
+    };
+    return {
+      w: 0.12,
+      place(x, y) {
+        const b = addBody(x, y, [{ pts: [[-0.03, -0.07], [0.03, -0.07], [0.055, 0], [-0.055, 0]] }, R(-0.035, -0.26, 0.07, 0.19)], () => {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(-0.025, -0.07);
+          ctx.lineTo(-0.04, -0.17);
+          ctx.lineTo(-0.02, -0.25);
+          ctx.lineTo(0.02, -0.25);
+          ctx.lineTo(0.04, -0.17);
+          ctx.lineTo(0.025, -0.07);
+          ctx.closePath();
+          finish('rgba(255,180,200,0.45)', true);
+          ctx.clip();
+          for (const [bx, r, ph, sp] of blobs) {
+            const by = -0.16 + Math.sin(clock * sp + ph) * 0.07;
+            ellipse(bx, by, r * 1.1, r * 1.4, goo, false);
+          }
+          ctx.restore();
+          poly([[-0.02, -0.25], [0.02, -0.25], [0.012, -0.28], [-0.012, -0.28]], '#9aa0aa');
+          drawBase();
+        }, { kind: 'lava', density: 0.8 });
+        b.breakable = 'lava';
+        b.shatter = () => {
+          const c = b.getWorldPoint(V(0, -0.17));
+          const v = b.getLinearVelocity();
+          const GOO = { color: goo, stain: goo };
+          for (let i = 0; i < 18; i++) {
+            drops.push(Object.assign({ x: c.x, y: c.y, vx: v.x + rand(-2, 2), vy: v.y + rand(-2.5, 0.5), r: rand(0.01, 0.022) }, GOO));
+          }
+          spawnShards(b, 0, -0.17, 4, 'rgba(255,200,215,0.8)');
+          splitBody(b, [{ parts: [{ pts: [[-0.03, -0.07], [0.03, -0.07], [0.055, 0], [-0.055, 0]] }], draw: drawBase }]);
+        };
+      },
+    };
+  }
+
+  function zenGarden() {
+    const rocks = [[rand(-0.06, -0.02), rand(0.012, 0.018)], [rand(0.02, 0.06), rand(0.008, 0.014)]];
+    return {
+      w: 0.22,
+      place(x, y) {
+        let b;
+        b = addBody(x, y, [R(-0.1, -0.045, 0.2, 0.045)], () => {
+          rrect(-0.1, -0.045, 0.2, 0.045, 0.006, '#8a5a3b');
+          if (b.sand) {
+            rrect(-0.088, -0.04, 0.176, 0.02, 0.004, '#e8d7a8', false);
+            for (let i = 0; i < 3; i++) line(-0.08, -0.034 + i * 0.006, 0.08, -0.034 + i * 0.006, 'rgba(160,130,80,0.5)', 0.002);
+            for (const [rx, r] of rocks) ellipse(rx, -0.04 - r * 0.5, r * 1.3, r, '#7d7a85');
+          }
+          line(0.06, -0.045, 0.1, -0.11, '#c8915a', 0.008);
+          line(0.05, -0.05, 0.07, -0.045, '#c8915a', 0.012);
+        }, { kind: 'zen', density: 1.6 });
+        b.sand = true;
+        b.breakable = 'zen';
+      },
+    };
+  }
+
+  function salesGong() {
+    const brand = pick(BRANDS);
+    return {
+      w: 0.2,
+      place(x, y) {
+        addBody(x, y, [R(-0.09, -0.24, 0.02, 0.24), R(0.07, -0.24, 0.02, 0.24), R(-0.09, -0.26, 0.18, 0.025), R(-0.1, -0.02, 0.2, 0.02)], () => {
+          rrect(-0.1, -0.02, 0.2, 0.02, 0.004, '#5b3a2a');
+          rrect(-0.09, -0.24, 0.02, 0.23, 0.004, '#8a3d2a');
+          rrect(0.07, -0.24, 0.02, 0.23, 0.004, '#8a3d2a');
+          rrect(-0.1, -0.265, 0.2, 0.03, 0.006, '#8a3d2a');
+          line(-0.03, -0.235, -0.03, -0.21, INK, 0.004);
+          line(0.03, -0.235, 0.03, -0.21, INK, 0.004);
+          const sw = Math.sin(clock * 3) * 0.004;
+          ellipse(sw, -0.14, 0.065, 0.065, '#e0b84a');
+          ellipse(sw, -0.14, 0.035, 0.035, '#f2c94e', false);
+          label('CLOSE', sw, -0.145, 0.014, '#8a5a3b');
+          label('IT!', sw, -0.128, 0.014, '#8a5a3b');
+          label(brand.name, 0, -0.005, 0.011, '#f2e2c4');
+        }, { kind: 'gong', density: 1.2 });
+      },
+    };
+  }
+
+  function bobblehead() {
+    const brand = pick(BRANDS);
+    const skin = pick(['#f2c9a5', '#c98d62', '#8d5a3b', '#f5d3b8']);
+    const hair = pick(['#2e2230', '#8a8f99', '#c96b3c', '#e0b84a']);
+    return {
+      w: 0.11,
+      place(x, y) {
+        let b;
+        b = addBody(x, y, [R(-0.045, -0.03, 0.09, 0.03), R(-0.03, -0.11, 0.06, 0.08), { x: 0, y: -0.15, r: 0.045 }], () => {
+          rrect(-0.045, -0.03, 0.09, 0.03, 0.005, '#1d1c22');
+          label('CEO', 0, -0.009, 0.012, '#e0b84a');
+          rrect(-0.03, -0.11, 0.06, 0.08, 0.012, '#3d4a6b');
+          poly([[-0.006, -0.11], [0.006, -0.11], [0.008, -0.07], [-0.008, -0.07]], brand.color, false);
+          b.bob = (b.bob || 0) * 0.985;
+          const wob = Math.sin(clock * 22) * b.bob;
+          ctx.save();
+          ctx.translate(0, -0.11);
+          ctx.rotate(wob * 0.5);
+          ellipse(0, -0.045, 0.05, 0.048, skin);
+          ctx.beginPath();
+          ctx.ellipse(0, -0.055, 0.051, 0.045, 0, Math.PI, Math.PI * 2);
+          ctx.fillStyle = hair;
+          ctx.fill();
+          ellipse(-0.017, -0.045, 0.006, 0.006, INK, false);
+          ellipse(0.017, -0.045, 0.006, 0.006, INK, false);
+          ctx.beginPath();
+          ctx.arc(0, -0.035, 0.022, 0.15 * Math.PI, 0.85 * Math.PI);
+          ctx.lineWidth = 0.005;
+          ctx.strokeStyle = INK;
+          ctx.stroke();
+          ctx.restore();
+        }, { kind: 'bobble', density: 1 });
+        b.bob = 0.4;
+      },
+    };
+  }
+
+  function plushMascot() {
+    const brand = pick(BRANDS);
+    return {
+      w: 0.17,
+      place(x, y) {
+        addBody(x, y, [R(-0.075, -0.09, 0.15, 0.09)], () => {
+          rrect(-0.075, -0.09, 0.15, 0.09, 0.03, '#f0c27a');
+          ctx.beginPath();
+          for (const sx of [-0.045, 0, 0.045]) ctx.ellipse(sx, -0.09, 0.03, 0.022, 0, Math.PI, Math.PI * 2);
+          ctx.fillStyle = '#d99c52';
+          ctx.fill();
+          ellipse(-0.028, -0.05, 0.007, 0.009, INK, false);
+          ellipse(0.028, -0.05, 0.007, 0.009, INK, false);
+          ellipse(-0.045, -0.035, 0.012, 0.007, 'rgba(230,107,107,0.5)', false);
+          ellipse(0.045, -0.035, 0.012, 0.007, 'rgba(230,107,107,0.5)', false);
+          ctx.beginPath();
+          ctx.arc(0, -0.042, 0.012, 0.1 * Math.PI, 0.9 * Math.PI);
+          ctx.lineWidth = 0.005;
+          ctx.strokeStyle = INK;
+          ctx.stroke();
+          rrect(-0.04, -0.018, 0.08, 0.014, 0.005, brand.color, false);
+          label(brand.name, 0, -0.007, 0.0095, '#fff');
+        }, { kind: 'plush', density: 0.25, restitution: 0.6, friction: 0.9 });
+      },
+    };
+  }
+
+  function goldStapler() {
+    return {
+      w: 0.17,
+      place(x, y) {
+        addBody(x, y, [R(-0.08, -0.025, 0.16, 0.025), R(-0.075, -0.055, 0.15, 0.03)], () => {
+          rrect(-0.08, -0.025, 0.16, 0.025, 0.008, '#b8912f');
+          rrect(-0.075, -0.058, 0.15, 0.034, 0.014, '#f2c94e');
+          ellipse(-0.04, -0.048, 0.025, 0.006, 'rgba(255,255,255,0.55)', false);
+          label('FOUNDER', 0.015, -0.034, 0.01, '#8a6a20');
+        }, { kind: 'stapler', density: 3 });
+      },
+    };
+  }
+
   // Swag unlocks as the flip count grows; each new item is guaranteed a spot
   // on the next desk.
   const UNLOCKS = [
+    { at: 2, name: 'Conference badge', make: confBadge },
     { at: 3, name: 'Stress ball', make: stressBall },
+    { at: 4, name: 'Fidget spinner', make: fidgetSpinner },
     { at: 6, name: 'Branded water bottle', make: waterBottle },
+    { at: 8, name: 'Decision ball', make: decisionBall },
     { at: 10, name: 'Patent award', make: patentAward },
+    { at: 12, name: 'Employee of the Month', make: plaque },
     { at: 15, name: 'Snow globe', make: snowGlobe },
+    { at: 18, name: 'Lava lamp', make: lavaLamp },
+    { at: 21, name: 'Zen garden', make: zenGarden },
     { at: 25, name: 'Anniversary monolith', make: monolith },
+    { at: 30, name: 'Sales gong', make: salesGong },
+    { at: 35, name: 'CEO bobblehead', make: bobblehead },
     { at: 40, name: 'Desk Flipper trophy', make: trophy },
+    { at: 50, name: 'Mascot plush', make: plushMascot },
+    { at: 60, name: 'Founder’s gold stapler', make: goldStapler },
   ];
   let freshUnlock = null;
 
@@ -979,7 +1248,10 @@
     if (chance(0.85)) extras.push(chance(0.5) ? bookStack() : booksUpright());
     if (chance(0.85)) extras.push(plant());
     const kitty = chance(0.7) ? cat() : null;
-    for (const make of shuffle(EXTRAS.concat(unlockedSwag(), unlockedSwag())).slice(0, randInt(1, 4))) extras.push(make());
+    const swag = unlockedSwag();
+    // Early on, double up the few unlocked items so they show up often.
+    const pool = EXTRAS.concat(swag, swag.length < 6 ? swag : []);
+    for (const make of shuffle(pool).slice(0, randInt(1, 4))) extras.push(make());
     shuffle(extras);
     if (kitty) extras.unshift(kitty);  // the fit below drops from the end
     if (freshUnlock) {
@@ -1218,12 +1490,18 @@
     'Love the energy! Report by end of day?',
     'Hey buddy. That report. Any update?',
   ];
-  const boss = { mode: 'away', t: 0, slide: 0, line: '' };
+  // Two managers share the job; each visit is one or the other.
+  const BOSS_LOOKS = [
+    { pitch: 1, shirt: '#cfe0f5', legs: '#4a4f5c', accent: '#e66b6b', skin: '#f2c9a5', hair: '#8a8f99', she: false },
+    { pitch: 1.7, shirt: '#3d4a6b', legs: '#3d4a6b', accent: '#f2c14e', skin: '#c98d62', hair: '#2e2230', she: true },
+    { pitch: 1.6, shirt: '#8a3d55', legs: '#2f2c38', accent: '#e8e2d6', skin: '#f5d3b8', hair: '#c96b3c', she: true },
+  ];
+  const boss = { mode: 'away', t: 0, slide: 0, line: '', look: BOSS_LOOKS[0] };
 
   function updateBoss(dt) {
     boss.t += dt;
     if (boss.mode === 'away' && state === 'ready' && idleT > BOSS_IDLE) {
-      Object.assign(boss, { mode: 'in', t: 0, line: pick(BOSS_LINES), said: false, talkT: 0 });
+      Object.assign(boss, { mode: 'in', t: 0, line: pick(BOSS_LINES), said: false, talkT: 0, look: pick(BOSS_LOOKS) });
     }
     if (boss.mode === 'in') {
       const was = boss.slide;
@@ -1231,7 +1509,7 @@
       if (was < 1 && boss.slide === 1) boss.talkT = 0;
       if (boss.slide === 1 && (boss.talkT += dt) > 0 && !boss.said) {
         boss.said = true;
-        sfx.mumble(boss.line.split(' ').length);
+        sfx.mumble(boss.line.split(' ').length, boss.look.pitch);
       }
       if (boss.talkT > 5) {
         boss.line = pick(BOSS_LINES.filter((l) => l !== boss.line));
@@ -1261,39 +1539,74 @@
     const jolt = boss.mode === 'flee' ? -0.05 : 0;
     ctx.save();
     ctx.translate(x, y + jolt);
+    const L = boss.look;
     // legs and shoes
-    rrect(-0.14, -0.8, 0.12, 0.78, 0.02, '#4a4f5c');
-    rrect(0.02, -0.8, 0.12, 0.78, 0.02, '#4a4f5c');
-    rrect(-0.17, -0.04, 0.15, 0.04, 0.02, INK);
-    rrect(0.0, -0.04, 0.15, 0.04, 0.02, INK);
-    // shirt, belt, tie
-    rrect(-0.2, -1.38, 0.4, 0.62, 0.08, '#cfe0f5');
-    rrect(-0.2, -0.82, 0.4, 0.05, 0.01, '#5b3a2a');
-    poly([[-0.03, -1.35], [0.03, -1.35], [0.045, -0.95], [0, -0.9], [-0.045, -0.95]], '#e66b6b');
+    if (L.she) {
+      rrect(-0.12, -0.5, 0.09, 0.48, 0.02, L.skin);
+      rrect(0.03, -0.5, 0.09, 0.48, 0.02, L.skin);
+      rrect(-0.15, -0.04, 0.13, 0.04, 0.02, INK);
+      rrect(0.01, -0.04, 0.13, 0.04, 0.02, INK);
+      poly([[-0.19, -0.86], [0.19, -0.86], [0.22, -0.46], [-0.22, -0.46]], L.legs);
+    } else {
+      rrect(-0.14, -0.8, 0.12, 0.78, 0.02, L.legs);
+      rrect(0.02, -0.8, 0.12, 0.78, 0.02, L.legs);
+      rrect(-0.17, -0.04, 0.15, 0.04, 0.02, INK);
+      rrect(0.0, -0.04, 0.15, 0.04, 0.02, INK);
+    }
+    // top: shirt and tie, or blazer over a blouse with a lanyard
+    rrect(-0.2, -1.38, 0.4, 0.62, 0.08, L.shirt);
+    if (L.she) {
+      poly([[-0.07, -1.37], [0.07, -1.37], [0, -1.15]], L.accent);
+      line(-0.07, -1.37, -0.02, -1.0, '#4fb3bf', 0.012);
+      line(0.07, -1.37, 0.02, -1.0, '#4fb3bf', 0.012);
+      rrect(-0.04, -1.02, 0.08, 0.1, 0.01, '#ffffff');
+    } else {
+      rrect(-0.2, -0.82, 0.4, 0.05, 0.01, '#5b3a2a');
+      poly([[-0.03, -1.35], [0.03, -1.35], [0.045, -0.95], [0, -0.9], [-0.045, -0.95]], L.accent);
+    }
     // arm holding a mug
-    rrect(-0.3, -1.32, 0.1, 0.42, 0.05, '#cfe0f5');
-    rrect(-0.38, -1.05, 0.16, 0.08, 0.04, '#cfe0f5');
+    rrect(-0.3, -1.32, 0.1, 0.42, 0.05, L.shirt);
+    rrect(-0.38, -1.05, 0.16, 0.08, 0.04, L.shirt);
     rrect(-0.47, -1.1, 0.11, 0.13, 0.015, '#f4f4f6');
     ctx.save();
     ctx.font = 'bold 0.03px ui-rounded, system-ui, sans-serif';
     ctx.fillStyle = '#e66b6b';
-    ctx.fillText('#1', -0.45, -1.03);
+    ctx.fillText(L.she ? 'CEO' : '#1', -0.45, -1.03);
     ctx.restore();
-    // head: thinning hair, glasses, polite smile
-    ellipse(0, -1.5, 0.13, 0.15, '#f2c9a5');
-    for (const [a0, a1] of [[0.82, 1.12], [-0.12, 0.18]]) {
+    // head
+    if (L.she) {
+      // bob with a bun on top, earrings
+      ellipse(0, -1.5, 0.165, 0.18, L.hair);
+      ellipse(0.03, -1.7, 0.06, 0.05, L.hair);
+      rrect(-0.165, -1.5, 0.33, 0.13, 0.04, L.hair, false);
+      ellipse(0, -1.49, 0.12, 0.145, L.skin);
       ctx.beginPath();
-      ctx.ellipse(0, -1.52, 0.135, 0.14, 0, Math.PI * a0, Math.PI * a1);
-      ctx.lineWidth = 0.04;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#8a8f99';
-      ctx.stroke();
+      ctx.ellipse(0, -1.55, 0.13, 0.1, 0, Math.PI, Math.PI * 2);
+      ctx.fillStyle = L.hair;
+      ctx.fill();
+      ellipse(-0.125, -1.44, 0.014, 0.014, L.accent);
+      ellipse(0.125, -1.44, 0.014, 0.014, L.accent);
+      line(-0.075, -1.55, -0.03, -1.56, INK, 0.008);
+      line(0.03, -1.56, 0.075, -1.55, INK, 0.008);
+      ellipse(-0.05, -1.51, 0.01, 0.01, INK, false);
+      ellipse(0.05, -1.51, 0.01, 0.01, INK, false);
+    } else {
+      // thinning hair, glasses, polite smile
+      ellipse(0, -1.5, 0.13, 0.15, L.skin);
+      for (const [a0, a1] of [[0.82, 1.12], [-0.12, 0.18]]) {
+        ctx.beginPath();
+        ctx.ellipse(0, -1.52, 0.135, 0.14, 0, Math.PI * a0, Math.PI * a1);
+        ctx.lineWidth = 0.04;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = L.hair;
+        ctx.stroke();
+      }
+      ellipse(-0.05, -1.52, 0.035, 0.03, 'rgba(255,255,255,0.4)');
+      ellipse(0.05, -1.52, 0.035, 0.03, 'rgba(255,255,255,0.4)');
+      line(-0.015, -1.52, 0.015, -1.52, INK, 0.008);
+      ellipse(-0.05, -1.52, 0.008, 0.008, INK, false);
+      ellipse(0.05, -1.52, 0.008, 0.008, INK, false);
     }
-    ellipse(-0.05, -1.52, 0.035, 0.03, 'rgba(255,255,255,0.4)');
-    ellipse(0.05, -1.52, 0.035, 0.03, 'rgba(255,255,255,0.4)');
-    line(-0.015, -1.52, 0.015, -1.52, INK, 0.008);
-    ellipse(-0.05, -1.52, 0.008, 0.008, INK, false);
-    ellipse(0.05, -1.52, 0.008, 0.008, INK, false);
     ctx.beginPath();
     if (boss.mode === 'flee') ctx.ellipse(0, -1.43, 0.025, 0.02, 0, 0, Math.PI * 2);
     else ctx.arc(0, -1.46, 0.04, 0.2 * Math.PI, 0.8 * Math.PI);
@@ -1536,12 +1849,12 @@
         for (let i = 0; i < 4; i++) tone('triangle', rand(900, 2200), 0.08, rand(0.05, 0.12), rand(0, 0.15));
       },
       // Muted-trombone "wah wah" mumbling, one syllable per word.
-      mumble(words) {
+      mumble(words, pitch = 1) {
         if (!ready()) return;
         let t = ac.currentTime + 0.02;
         for (let i = 0; i < words; i++) {
           const dur = rand(0.12, 0.22);
-          const f0 = rand(150, 230) * (i === words - 1 ? 0.8 : 1);
+          const f0 = rand(150, 230) * pitch * (i === words - 1 ? 0.8 : 1);
           const o = ac.createOscillator();
           o.type = 'sawtooth';
           o.frequency.setValueAtTime(f0, t);
@@ -1603,6 +1916,15 @@
         o.start(t);
         o.stop(t + 0.65);
       },
+      gong(v) {
+        if (!ready()) return;
+        const p = 0.08 + 0.17 * v;
+        tone('sine', 140, p, 2.4);
+        tone('sine', 223, p * 0.6, 1.9);
+        tone('triangle', 377, p * 0.3, 1.3);
+        tone('sine', 512, p * 0.2, 0.9);
+        burst('lowpass', 900, 1, p * 0.6, 0.15);
+      },
       ding(big) {
         if (!ready()) return;
         const f = big ? 1320 : 880;
@@ -1618,7 +1940,7 @@
   const GLASS = 'rgba(214,236,250,0.9)';
   const GRACE = 0.25;        // ignore the hits from the launch itself
   const MAX_SHARDS = 40;
-  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350 };
+  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350, lava: 350 };
 
   function makeScreen(b, x, y, w, h) {
     b.breakable = 'screen';
@@ -1668,7 +1990,16 @@
       if (t < 1.8 || thuds >= 3 || clock - (b.lastThud || 0) < 0.15) continue;
       b.lastThud = clock;
       thuds++;
+      if (b.kind === 'bobble') b.bob = Math.min(1.2, (b.bob || 0) + t / 6);
       if (b.kind === 'duck') sfx.squeak(Math.min(1, t / 6));
+      else if (b.kind === 'gong') {
+        sfx.gong(Math.min(1, t / 6));
+        if (!b.rung && t > 3) {
+          b.rung = true;
+          const c = b.getWorldCenter();
+          addPoints(200, 'deal closed!', c.x, c.y);
+        }
+      }
       else sfx.thud(Math.min(1, t / 8), b === desk ? 1 : clamp(b.getMass() / 0.4, 0.15, 0.8));
     }
     for (const b of bodies.slice()) {
@@ -1682,13 +2013,25 @@
       else if (b.breakable === 'pot' && dv > 3.5) breakApart(b, 'pot', 'pot smashed');
       else if (b.breakable === 'acrylic' && dv > 4) breakApart(b, 'acrylic', 'patent revoked');
       else if (b.breakable === 'snowglobe' && dv > 3) breakApart(b, 'snowglobe', 'snow globe smashed');
+      else if (b.breakable === 'lava' && dv > 3) breakApart(b, 'lava', 'lava lamp popped');
+      else if (b.breakable === 'zen' && dv > 3 && b.sand) spillSand(b);
     }
+  }
+
+  function spillSand(b) {
+    b.sand = false;
+    const c = b.getWorldPoint(V(0, -0.04));
+    const v = b.getLinearVelocity();
+    for (let i = 0; i < 24; i++) {
+      drops.push(Object.assign({ x: c.x + rand(-0.08, 0.08), y: c.y, vx: v.x + rand(-1.5, 1.5), vy: v.y + rand(-2.5, 0), r: rand(0.006, 0.014) }, SAND));
+    }
+    addPoints(150, 'zen disturbed', c.x, c.y);
   }
 
   function breakApart(b, kind, label) {
     const c = b.getWorldCenter();
     b.shatter();
-    if (kind === 'lamp' || kind === 'snowglobe' || kind === 'acrylic') sfx.shatter(0.7); else sfx.smash();
+    if (kind === 'lamp' || kind === 'snowglobe' || kind === 'acrylic' || kind === 'lava') sfx.shatter(0.7); else sfx.smash();
     addPoints(POINTS[kind], label, c.x, c.y);
     shake = Math.min(1, shake + 0.2);
   }
@@ -1824,6 +2167,7 @@
   const SNOW = { color: '#ffffff', stain: 'rgba(255,255,255,0.85)' };
   const CLIP = { color: '#c9ccd3', stain: 'rgba(201,204,211,0.9)' };
   const BAND = { color: '#e66b6b', stain: 'rgba(230,107,107,0.8)' };
+  const SAND = { color: '#e8d7a8', stain: 'rgba(232,215,168,0.9)' };
 
   function spillDirt(b, n) {
     const c = b.getWorldPoint(V(0, -0.1));
