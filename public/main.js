@@ -92,7 +92,7 @@
   // ---------- world state ----------
 
   let W = 0, H = 0, dpr = 1, ppm = 100, Wm = 0, Hm = 0, floorY = 0, cx = 0;
-  let world, desk, bodies, drops, stains;
+  let world, desk, bodies, drops, stains, armJoints = [];
   let state = 'ready';          // ready | flipped | fadeout | fadein
   let stateT = 0, fade = 0, shake = 0, idleT = 0, clock = 0;
   let lastDeskSpeed = 0;
@@ -270,28 +270,107 @@
   // Each factory returns { w, place(x, y) } where (x, y) is the bottom
   // center of the item's footprint on the desktop.
 
-  function monitor() {
+  // A screen face with its wallpaper, drawn into the rectangle (x, y, w, h).
+  function screenFace(b, x, y, w, h, hue, lines) {
+    if (b.dead) return rrect(x, y, w, h, 0.012, DEAD_SCREEN, false);
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, hsl(hue, 70, 64));
+    g.addColorStop(1, hsl(hue + 50, 70, 46));
+    rrect(x, y, w, h, 0.012, g, false);
+    const k = h / 0.32;
+    rrect(x + 0.05 * k, y + 0.04 * k, Math.min(0.32 * k, w * 0.6), 0.23 * k, 0.012, 'rgba(255,255,255,0.88)', false);
+    lines.forEach(([a, c], i) => line(x + 0.07 * k + a * k, y + 0.07 * k + i * 0.033 * k, x + 0.07 * k + (a + c * 0.8) * k, y + 0.07 * k + i * 0.033 * k, hsl(hue + i * 40, 55, 50), 0.012 * k));
+    ellipse(x + w - 0.12 * k, y + h - 0.1 * k, 0.035 * k, 0.035 * k, 'rgba(255,255,255,0.35)', false);
+  }
+
+  const screenLines = () => Array.from({ length: 6 }, () => [rand(0, 0.06), rand(0.06, 0.22)]);
+
+  // A monitor on a stand. sw and sh are the screen size; widescreens are wider.
+  function monitor(sw = 0.58, sh = 0.32) {
     const hue = rand(0, 360);
-    const lines = Array.from({ length: 6 }, () => [rand(0, 0.06), rand(0.06, 0.22)]);
+    const lines = screenLines();
+    const fw = sw + 0.04, fh = sh + 0.06;
+    const top = -0.16 - fh;
     return {
-      w: 0.62,
+      w: fw,
       place(x, y) {
-        const b = addBody(x, y, [R(-0.13, -0.03, 0.26, 0.03), R(-0.025, -0.17, 0.05, 0.14), R(-0.31, -0.54, 0.62, 0.38)], () => {
+        const b = addBody(x, y, [R(-0.13, -0.03, 0.26, 0.03), R(-0.025, -0.17, 0.05, 0.14), R(-fw / 2, top, fw, fh)], () => {
           rrect(-0.025, -0.19, 0.05, 0.17, 0.005, '#5b6170');
           rrect(-0.13, -0.03, 0.26, 0.03, 0.012, '#4a4f5c');
-          rrect(-0.31, -0.54, 0.62, 0.38, 0.025, '#2f3340');
-          if (b.dead) return rrect(-0.29, -0.52, 0.58, 0.32, 0.012, DEAD_SCREEN, false);
-          const g = ctx.createLinearGradient(0, -0.52, 0, -0.19);
-          g.addColorStop(0, hsl(hue, 70, 64));
-          g.addColorStop(1, hsl(hue + 50, 70, 46));
-          rrect(-0.29, -0.52, 0.58, 0.32, 0.012, g, false);
-          rrect(-0.24, -0.48, 0.32, 0.23, 0.012, 'rgba(255,255,255,0.88)', false);
-          lines.forEach(([a, b], i) => line(-0.22 + a, -0.45 + i * 0.033, -0.22 + a + b * 0.8, -0.45 + i * 0.033, hsl(hue + i * 40, 55, 50), 0.012));
-          ellipse(0.17, -0.3, 0.035, 0.035, 'rgba(255,255,255,0.35)', false);
+          rrect(-fw / 2, top, fw, fh, 0.025, '#2f3340');
+          screenFace(b, -sw / 2, top + 0.02, sw, sh, hue, lines);
         }, { kind: 'computer' });
-        makeScreen(b, -0.29, -0.52, 0.58, 0.32);
+        makeScreen(b, -sw / 2, top + 0.02, sw, sh);
       },
     };
+  }
+
+  const widescreen = () => monitor(0.86, 0.32);
+
+  // One or two screens floating on arms from a pole clamped to the back of
+  // the desk, with the keyboard tucked underneath. The clamp and each arm
+  // hold until a hard enough yank snaps them.
+  function armSetup(count) {
+    const sw = count === 1 ? pick([0.58, 0.82]) : 0.5;
+    const fw = sw + 0.04, fh = 0.38;
+    const gap = 0.04;
+    const span = count * fw + (count - 1) * gap;
+    const screens = Array.from({ length: count }, () => ({ hue: rand(0, 360), lines: screenLines() }));
+    const kb = keyboard();
+    const ms = mouse();
+    const poleH = 0.62;
+    return {
+      w: span + 0.1,
+      place(x, y) {
+        const left = x - (span + 0.1) / 2;
+        const px = left + 0.04;
+        const py = y - poleH;
+        const pole = addBody(px, y, [R(-0.04, -0.05, 0.08, 0.05), R(-0.016, -poleH, 0.032, poleH - 0.05)], () => {
+          rrect(-0.016, -poleH - 0.01, 0.032, poleH - 0.04, 0.01, '#9aa0aa');
+          rrect(-0.04, -0.05, 0.08, 0.05, 0.01, '#5b6170');
+          ellipse(0, -poleH, 0.022, 0.022, '#5b6170');
+        }, { kind: 'arm', group: -2, density: 1.5, z: -0.5 });
+        const clamp = world.createJoint(pl.WeldJoint({ frequencyHz: 0 }, desk, pole, V(px, y)));
+        armJoints.push({ j: clamp, limit: 140, label: 'clamp gave way' });
+        screens.forEach((sc, i) => {
+          const cx0 = 0.06 + fw / 2 + i * (fw + gap);   // screen center, relative to the pole
+          const cy0 = 0.1;
+          const b = addBody(px, py, [R(cx0 - fw / 2, cy0 - fh / 2, fw, fh)], () => {
+            line(0, 0, cx0 * 0.5, -0.06, INK, 0.05);
+            line(cx0 * 0.5, -0.06, cx0, cy0, INK, 0.05);
+            line(0, 0, cx0 * 0.5, -0.06, '#9aa0aa', 0.03);
+            line(cx0 * 0.5, -0.06, cx0, cy0, '#9aa0aa', 0.03);
+            ellipse(cx0 * 0.5, -0.06, 0.018, 0.018, '#5b6170');
+            rrect(cx0 - fw / 2, cy0 - fh / 2, fw, fh, 0.025, '#2f3340');
+            screenFace(b, cx0 - sw / 2, cy0 - fh / 2 + 0.03, sw, fh - 0.06, sc.hue, sc.lines);
+          }, { kind: 'computer', group: -2 });
+          makeScreen(b, cx0 - sw / 2, cy0 - fh / 2 + 0.03, sw, fh - 0.06);
+          const j = world.createJoint(pl.RevoluteJoint({
+            enableLimit: true, lowerAngle: -0.35, upperAngle: 0.35,
+            enableMotor: true, motorSpeed: 0, maxMotorTorque: 8,
+          }, pole, b, V(px, py)));
+          armJoints.push({ j, limit: 75, label: 'monitor snapped off' });
+        });
+        kb.place(x + 0.05 - (span > 0.9 ? 0.12 : 0), y);
+        ms.place(x + 0.05 + kb.w / 2 + 0.08 - (span > 0.9 ? 0.12 : 0), y);
+      },
+    };
+  }
+
+  // Snap any arm or clamp that took more force than it can hold.
+  function checkArms(dt) {
+    if (state !== 'flipped') return;
+    for (const a of armJoints) {
+      if (a.broken) continue;
+      const f = a.j.getReactionForce(1 / dt).length();
+      a.max = Math.max(a.max || 0, f);
+      if (f < a.limit) continue;
+      a.broken = true;
+      const p = a.j.getAnchorB();
+      world.destroyJoint(a.j);
+      sfx.crack();
+      addPoints(200, a.label, p.x, p.y);
+    }
   }
 
   function laptop() {
@@ -1233,6 +1312,11 @@
   const COMPUTERS = [
     () => [monitor(), keyboard(), mouse()],
     () => [monitor(), keyboard(), mouse()],
+    () => [widescreen(), keyboard(), mouse()],
+    () => [monitor(0.5), monitor(0.5), keyboard(), mouse()],
+    () => [armSetup(1)],
+    () => [armSetup(2)],
+    () => [armSetup(2)],
     () => [laptop(), mouse()],
     () => [crt(), keyboard(), mouse()],
     () => [speaker(), monitor(), speaker(), keyboard(), mouse()],
@@ -1291,6 +1375,7 @@
     cats = [];
     confetti = [];
     grab = null;
+    armJoints = [];
     world.on('post-solve', onPostSolve);
     world.on('begin-contact', onBeginContact);
 
@@ -1303,6 +1388,7 @@
     pickRoom();
     buildDesk();
     buildItems();
+    placeDog();
     bodies.sort((a, b) => a.z - b.z);
     lastDeskSpeed = 0;
   }
@@ -1330,6 +1416,123 @@
   // wakes, leaps clear and sits on the floor looking unimpressed.
 
   let cats = [];
+  // ---------- dog ----------
+  // Sometimes a dog naps on the floor by the desk. Anything crashing down
+  // nearby (the desk most of all) sends it yelping off the side of the screen.
+
+  const DOG_COATS = [
+    { fur: '#c8915a', dark: '#8a5a3b' },
+    { fur: '#f4f4f6', dark: '#3b3a44' },
+    { fur: '#3b3a44', dark: '#1d1c22' },
+    { fur: '#e0b84a', dark: '#b8912f' },
+  ];
+  let dog = null;
+
+  function placeDog() {
+    dog = chance(0.4) ? {
+      x: clamp(cx + rand(-0.9, 0.9), 0.4, Wm - 0.4),
+      dir: chance(0.5) ? 1 : -1,
+      coat: pick(DOG_COATS),
+      mode: 'sleep',
+      t: 0,
+    } : null;
+  }
+
+  function updateDog(dt) {
+    if (!dog) return;
+    dog.t += dt;
+    if (dog.mode === 'sleep' && state === 'flipped' && stateT > GRACE) {
+      let scared = deskOnFloor() && Math.abs(desk.getPosition().x - dog.x) < 1.6;
+      for (const b of bodies) {
+        if (scared) break;
+        const p = b.getPosition();
+        scared = Math.abs(p.x - dog.x) < 0.45 && p.y > floorY - 0.35 && b.getLinearVelocity().length() > 1.5;
+      }
+      if (scared) {
+        Object.assign(dog, { mode: 'startled', t: 0 });
+        // run away from the desk
+        dog.dir = dog.x < desk.getPosition().x ? -1 : 1;
+        sfx.bark();
+        addPoints(150, 'dog spooked', dog.x, floorY - 0.4);
+      }
+    } else if (dog.mode === 'startled' && dog.t > 0.45) {
+      Object.assign(dog, { mode: 'run', t: 0 });
+    } else if (dog.mode === 'run') {
+      dog.x += dog.dir * Math.min(4.5, 1 + dog.t * 8) * dt;
+      if (dog.x < -0.6 || dog.x > Wm + 0.6) dog.mode = 'gone';
+    }
+  }
+
+  function drawDog() {
+    if (!dog || dog.mode === 'gone') return;
+    const { fur, dark } = dog.coat;
+    ctx.save();
+    ctx.translate(dog.x, floorY);
+    ctx.scale(dog.dir, 1);
+    if (dog.mode === 'sleep') {
+      const breathe = Math.sin(clock * 2) * 0.006;
+      ellipse(-0.02, -0.075, 0.2, 0.075 + breathe, fur);
+      ellipse(-0.08, -0.09, 0.07, 0.04, dark, false);
+      line(-0.2, -0.03, -0.29, -0.02, INK, 0.035);
+      line(-0.2, -0.03, -0.29, -0.02, fur, 0.02);
+      rrect(0.08, -0.03, 0.17, 0.03, 0.015, fur);
+      ellipse(0.17, -0.07, 0.08, 0.06, fur);
+      ellipse(0.24, -0.06, 0.035, 0.028, fur);
+      ellipse(0.27, -0.065, 0.013, 0.011, INK, false);
+      ellipse(0.13, -0.075, 0.03, 0.05, dark);
+      line(0.17, -0.08, 0.2, -0.08, INK, 0.006);
+      ctx.restore();
+      ctx.save();
+      ctx.font = 'bold 0.06px ui-rounded, system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(42,39,51,0.55)';
+      for (let i = 0; i < 3; i++) {
+        const k = (clock * 0.4 + i / 3) % 1;
+        ctx.globalAlpha = Math.sin(k * Math.PI);
+        ctx.fillText('z', dog.x + dog.dir * (0.18 + k * 0.1), floorY - 0.16 - k * 0.18);
+      }
+      ctx.restore();
+      return;
+    }
+    const run = dog.mode === 'run';
+    const ph = run ? dog.t * 22 : 0;
+    const hop = run ? Math.abs(Math.sin(ph)) * 0.04 : 0.03;
+    ctx.translate(0, -hop);
+    // legs
+    const leg = (x, a) => {
+      const sw = run ? Math.sin(ph + a) * 0.07 : 0;
+      line(x, -0.13, x + sw, -0.01, INK, 0.04);
+      line(x, -0.13, x + sw, -0.01, fur, 0.024);
+    };
+    leg(-0.13, 0);
+    leg(0.12, Math.PI);
+    // tail straight up in alarm, streaming back when running
+    const tx = run ? -0.32 : -0.24, ty = run ? -0.2 : -0.36;
+    line(-0.19, -0.2, tx, ty, INK, 0.035);
+    line(-0.19, -0.2, tx, ty, fur, 0.02);
+    ellipse(0, -0.19, 0.2, 0.08, fur);
+    ellipse(-0.07, -0.21, 0.07, 0.045, dark, false);
+    leg(-0.09, Math.PI);
+    leg(0.16, 0);
+    // head
+    ellipse(0.2, -0.29, 0.08, 0.07, fur);
+    ellipse(0.27, -0.275, 0.045, 0.032, fur);
+    ellipse(0.31, -0.285, 0.014, 0.012, INK, false);
+    const flap = run ? Math.sin(ph) * 0.3 : -0.6;
+    ctx.save();
+    ctx.translate(0.17, -0.33);
+    ctx.rotate(flap);
+    ellipse(-0.02, 0.04, 0.025, 0.055, dark);
+    ctx.restore();
+    ellipse(0.22, -0.305, 0.014, 0.017, '#ffffff');
+    ellipse(0.225, -0.305, 0.007, 0.009, INK, false);
+    if (dog.mode === 'startled') {
+      ctx.font = 'bold 0.11px ui-rounded, system-ui, sans-serif';
+      ctx.fillStyle = INK;
+      ctx.fillText('!', 0.2, -0.4);
+    }
+    ctx.restore();
+  }
+
   const CAT_COATS = [
     { fur: '#f0a35e', dark: '#d9823e' },
     { fur: '#3b3a44', dark: '#2a2733' },
@@ -1925,6 +2128,29 @@
         tone('sine', 512, p * 0.2, 0.9);
         burst('lowpass', 900, 1, p * 0.6, 0.15);
       },
+      // Two quick startled yips.
+      bark() {
+        if (!ready()) return;
+        for (const d of [0, 0.17]) {
+          const t = ac.currentTime + 0.02 + d;
+          const o = ac.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(420, t);
+          o.frequency.exponentialRampToValueAtTime(230, t + 0.11);
+          const f = ac.createBiquadFilter();
+          f.type = 'bandpass';
+          f.Q.value = 2;
+          f.frequency.setValueAtTime(1100, t);
+          const g = ac.createGain();
+          env(g, t, 0.35, 0.13);
+          o.connect(f);
+          f.connect(g);
+          g.connect(master);
+          o.start(t);
+          o.stop(t + 0.18);
+        }
+        burst('bandpass', 1500, 1.5, 0.12, 0.08);
+      },
       ding(big) {
         if (!ready()) return;
         const f = big ? 1320 : 880;
@@ -2282,6 +2508,7 @@
   // ---------- coffee + shake ----------
 
   function stepExtras(dt) {
+    checkArms(dt);
     for (const b of bodies) {
       if (b.kind !== 'mug' || !(b.coffee > 0)) continue;
       if (Math.cos(b.getAngle()) > 0.35) continue;
@@ -2346,6 +2573,7 @@
       acc -= STEP;
     }
     updateCats(dt);
+    updateDog(dt);
     updateBoss(dt);
     for (const p of popups) p.t += dt;
     popups = popups.filter((p) => p.t < 1.4);
@@ -2640,6 +2868,7 @@
       ctx.restore();
     }
     for (const c of cats) drawCat(c);
+    drawDog();
     drawBossBubble();
 
     ctx.font = 'bold 0.075px ui-rounded, system-ui, sans-serif';
@@ -2796,6 +3025,9 @@
     get bodies() { return bodies.length; },
     celebrate: () => celebrate(desk),
     get deskInfo() { return { cracks: desk.splits.length, drawers: bodies.filter(b => b.kind === "drawer").length }; },
+    get dog() { return dog && dog.mode; },
+    get arms() { return armJoints.map((a) => [a.broken ? 1 : 0, Math.round(a.max || 0)]); },
+    get kinds() { return bodies.map((b) => b.kind); },
     set room(name) { room = null; pickRoom(); room.name = name; room.theme = ROOMS[name]; document.body.dataset.room = name; document.documentElement.style.setProperty('--ink', room.theme.ink); },
   };
 
