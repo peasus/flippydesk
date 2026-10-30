@@ -14,6 +14,7 @@
   const scoreEl = document.getElementById('score');
   const scoreNumEl = scoreEl.querySelector('.num');
   const hangEl = scoreEl.querySelector('.hang');
+  const muteEl = document.getElementById('mute');
 
   const INK = '#2a2733';
   const LW = 0.011;              // outline width, in meters
@@ -752,6 +753,7 @@
     // strength runs from about 0.3 (a lazy drag) to 2.6 (a hard flick). Lift
     // grows linearly with it, spin and scatter a little slower, so gentle
     // swipes tip the desk over and hard ones send it cartwheeling.
+    sfx.whoosh(strength);
     const m = desk.getMass();
     const spin = Math.sqrt(strength);
     const p = desk.getWorldPoint(V(side * rand(0.3, 0.45) * clamp(spin, 0.7, 1.3), 0));
@@ -767,6 +769,125 @@
       b.setAwake(true);
     }
   }
+
+  // ---------- sound ----------
+  // Everything is synthesized with Web Audio, so there are no files to load.
+
+  const sfx = (() => {
+    let ac = null, master = null, noise = null, recent = [];
+    let muted = false;
+    try { muted = localStorage.getItem('flippydesk.muted') === '1'; } catch (e) { /* storage blocked */ }
+
+    // Browsers only allow audio after a user gesture, so this runs on the
+    // first tap, click or key press.
+    function unlock() {
+      if (!ac) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        ac = new AC();
+        master = ac.createGain();
+        master.gain.value = muted ? 0 : 0.7;
+        const comp = ac.createDynamicsCompressor();
+        master.connect(comp);
+        comp.connect(ac.destination);
+        noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+        const d = noise.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (ac.state !== 'running') ac.resume();
+    }
+
+    // Drop sounds when lots start at once, so a big crash doesn't clip.
+    function ready() {
+      if (!ac || muted || ac.state !== 'running') return false;
+      const now = ac.currentTime;
+      recent = recent.filter((t) => now - t < 0.05);
+      if (recent.length >= 6) return false;
+      recent.push(now);
+      return true;
+    }
+
+    function env(g, t, peak, dur) {
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    }
+
+    function burst(type, freq, q, peak, dur, delay = 0, freqEnd = 0) {
+      const t = ac.currentTime + delay;
+      const src = ac.createBufferSource();
+      src.buffer = noise;
+      src.playbackRate.value = rand(0.8, 1.2);
+      const f = ac.createBiquadFilter();
+      f.type = type;
+      f.frequency.setValueAtTime(freq, t);
+      if (freqEnd) f.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+      f.Q.value = q;
+      const g = ac.createGain();
+      env(g, t, peak, dur);
+      src.connect(f);
+      f.connect(g);
+      g.connect(master);
+      src.start(t, rand(0, 0.5));
+      src.stop(t + dur + 0.05);
+    }
+
+    function tone(type, freq, peak, dur, delay = 0, freqEnd = 0) {
+      const t = ac.currentTime + delay;
+      const o = ac.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+      const g = ac.createGain();
+      env(g, t, peak, dur);
+      o.connect(g);
+      g.connect(master);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
+
+    return {
+      unlock,
+      get muted() { return muted; },
+      setMuted(m) {
+        muted = m;
+        try { localStorage.setItem('flippydesk.muted', m ? '1' : '0'); } catch (e) { /* storage blocked */ }
+        if (master) master.gain.setTargetAtTime(m ? 0 : 0.7, ac.currentTime, 0.02);
+      },
+      // v is loudness 0..1; size 0..1 makes it lower and longer.
+      thud(v, size) {
+        if (!ready()) return;
+        burst('lowpass', 300 + (1 - size) * 1800, 0.8, 0.5 * v, 0.08 + size * 0.2);
+        tone('sine', 140 - size * 90, 0.6 * v * size + 0.05 * v, 0.1 + size * 0.25, 0, 40);
+      },
+      whoosh(strength) {
+        if (!ready()) return;
+        burst('bandpass', 300, 1.2, clamp(0.15 * strength, 0.05, 0.4), 0.45, 0, 1600);
+      },
+      crack() {
+        if (!ready()) return;
+        burst('highpass', 2500, 0.7, 0.5, 0.06);
+        tone('square', rand(1800, 2600), 0.08, 0.04);
+      },
+      shatter(v = 1) {
+        if (!ready()) return;
+        burst('highpass', 3000, 0.5, 0.6 * v, 0.4);
+        burst('bandpass', 6000, 2, 0.35 * v, 0.25, 0.03);
+        for (let i = 0; i < 7; i++) tone('sine', rand(2500, 6500), 0.06 * v, rand(0.05, 0.15), rand(0.02, 0.35));
+      },
+      smash() {
+        if (!ready()) return;
+        burst('bandpass', 1800, 1.5, 0.5, 0.18);
+        for (let i = 0; i < 4; i++) tone('triangle', rand(900, 2200), 0.08, rand(0.05, 0.12), rand(0, 0.15));
+      },
+      ding(big) {
+        if (!ready()) return;
+        const f = big ? 1320 : 880;
+        tone('sine', f, 0.09, 0.18);
+        tone('sine', f * 1.5, 0.07, 0.25, 0.07);
+      },
+    };
+  })();
 
   // ---------- breaking things ----------
 
@@ -785,19 +906,30 @@
   // Record the hardest hit each breakable body took during a physics step,
   // as a change in velocity (impulse / mass), so heavy things need bigger hits.
   function onPostSolve(contact, impulse) {
-    if (state !== 'flipped' || stateT < GRACE) return;
+    if (state !== 'flipped') return;
     const n = contact.getManifold().pointCount;
     let total = 0;
     for (let i = 0; i < n; i++) total += impulse.normalImpulses[i];
     for (const b of [contact.getFixtureA().getBody(), contact.getFixtureB().getBody()]) {
-      if (!b.breakable) continue;
+      if (!b.isDynamic()) continue;
       const dv = total / b.getMass();
-      if (dv > (b.hit || 0)) b.hit = dv;
+      if (dv > (b.thud || 0)) b.thud = dv;
+      if (b.breakable && stateT >= GRACE && dv > (b.hit || 0)) b.hit = dv;
     }
   }
 
   // Bodies can't be created or destroyed mid-step, so breaking happens here.
   function processHits() {
+    let thuds = 0;
+    for (const b of bodies) {
+      const t = b.thud;
+      if (!t) continue;
+      b.thud = 0;
+      if (t < 1.5 || thuds >= 3 || clock - (b.lastThud || 0) < 0.08) continue;
+      b.lastThud = clock;
+      thuds++;
+      sfx.thud(Math.min(1, t / 9), b === desk ? 1 : clamp(b.getMass() / 0.4, 0.15, 0.8));
+    }
     for (const b of bodies.slice()) {
       const dv = b.hit;
       if (!dv) continue;
@@ -811,6 +943,7 @@
   function breakApart(b, kind, label) {
     const c = b.getWorldCenter();
     b.shatter();
+    if (kind === 'mug') sfx.smash(); else sfx.shatter(0.7);
     addPoints(POINTS[kind], label, c.x, c.y);
     shake = Math.min(1, shake + 0.2);
   }
@@ -823,9 +956,11 @@
     shake = Math.min(1, shake + 0.15);
     if (b.cracks.length >= 3 || dv > 7) {
       b.dead = true;
+      sfx.shatter(1);
       spawnShards(b, s.x + s.w / 2, s.y + s.h / 2, randInt(4, 7), GLASS);
       addPoints(POINTS.screen, 'screen smashed', c.x, c.y);
     } else {
+      sfx.crack();
       addPoints(POINTS.crack, 'cracked', c.x, c.y);
     }
   }
@@ -928,6 +1063,7 @@
 
   function addPoints(n, label, x, y) {
     score += n;
+    sfx.ding(n >= 500);
     popups.push({ x: clamp(x, 0.7, Wm - 0.7), y: Math.max(y, 1), text: `+${n} ${label}`, t: 0 });
     updateScore();
   }
@@ -1216,6 +1352,7 @@
   }
 
   canvas.addEventListener('pointerdown', (e) => {
+    sfx.unlock();
     if (state !== 'ready') return;
     if (e.clientY < deskTopPx() - 30) return;  // swipes start at the desk, not above it
     swipe = { x0: e.clientX, y0: e.clientY, peak: 0, vx: 0, pts: [[e.clientX, e.clientY, performance.now()]] };
@@ -1225,11 +1362,23 @@
   canvas.addEventListener('pointerup', (e) => { tryFlip(e, 25); swipe = null; });
   canvas.addEventListener('pointercancel', () => { swipe = null; });
   window.addEventListener('keydown', (e) => {
+    sfx.unlock();
     if (e.code === 'Space' || e.code === 'ArrowUp') {
       e.preventDefault();
       flip(rand(1, 1.8), chance(0.5) ? 1 : -1, rand(-0.4, 0.4));
     }
   });
+
+  function showMute() {
+    muteEl.textContent = sfx.muted ? '🔇' : '🔊';
+    muteEl.setAttribute('aria-pressed', String(sfx.muted));
+  }
+  muteEl.addEventListener('click', () => {
+    sfx.unlock();
+    sfx.setMuted(!sfx.muted);
+    showMute();
+  });
+  showMute();
 
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
