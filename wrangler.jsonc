@@ -1,0 +1,8 @@
+{
+  // Static site served by Cloudflare Workers static assets. No build step.
+  "name": "flippydesk",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./public"
+  }
+}
