@@ -101,3 +101,36 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 #mute:focus-visible { outline: 2px solid #2a2733; }
+
+#unlock {
+  position: fixed;
+  left: 16px;
+  top: max(36px, calc(env(safe-area-inset-top) + 22px));
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+#toast {
+  position: fixed;
+  left: 50%;
+  top: max(160px, calc(env(safe-area-inset-top) + 146px));
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: #2a2733;
+  color: #ffd84d;
+  font-size: 16px;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+}
+#toast.show { animation: toast 2.6s ease-out forwards; }
+
+@keyframes toast {
+  0% { opacity: 0; transform: translate(-50%, -8px) scale(0.9); }
+  10%, 80% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, 0) scale(1); }
+}
