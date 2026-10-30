@@ -417,7 +417,11 @@
     return {
       w: kind === 'leafy' ? 0.28 : 0.22,
       place(x, y) {
-        addBody(x, y, parts, () => {
+        const drawPot = () => {
+          poly(potPts, pot);
+          rrect(-0.1, -0.18, 0.2, 0.035, 0.01, pot);
+        };
+        const drawPlant = () => {
           if (kind === 'leafy') {
             for (const lf of leaves) {
               ctx.save();
@@ -449,9 +453,29 @@
             }
             ellipse(0, -0.38, 0.028, 0.028, '#f2c14e');
           }
-          poly(potPts, pot);
-          rrect(-0.1, -0.18, 0.2, 0.035, 0.01, pot);
+        };
+        const b = addBody(x, y, parts, () => {
+          drawPlant();
+          drawPot();
         }, { kind: 'plant' });
+        b.breakable = 'pot';
+        // The pot splits in two and loses its rim; the plant keeps a clump
+        // of roots and dirt and the rest of the soil spills out.
+        const left = [[-0.07, 0], [0.005, 0], [-0.015, -0.08], [0.01, -0.15], [-0.09, -0.15]];
+        const right = [[0.005, 0], [0.07, 0], [0.09, -0.15], [0.01, -0.15], [-0.015, -0.08]];
+        b.shatter = () => {
+          spillDirt(b, 40);
+          splitBody(b, [
+            { parts: [{ pts: left }], draw: () => poly(left, pot) },
+            { parts: [{ pts: [[0.005, 0], [0.07, 0], [0.09, -0.15], [-0.015, -0.15]] }], draw: () => poly(right, pot) },
+            { parts: [R(-0.1, -0.18, 0.2, 0.035)], draw: () => rrect(-0.1, -0.18, 0.2, 0.035, 0.01, pot) },
+            {
+              parts: [{ x: 0, y: -0.14, r: 0.055 }, ...parts.slice(2)],
+              draw: () => { drawPlant(); ellipse(0, -0.14, 0.065, 0.05, '#5a3d2b'); },
+              o: { density: 0.4 },
+            },
+          ]);
+        };
       },
     };
   }
@@ -707,8 +731,6 @@
     // Frictionless side walls so things slide down them instead of sticking.
     ground.createFixture(pl.Box(0.5, 20, V(-0.5, floorY - 19)), { friction: 0 });
     ground.createFixture(pl.Box(0.5, 20, V(Wm + 0.5, floorY - 19)), { friction: 0 });
-    // A ceiling at the top of the screen keeps everything in view.
-    ground.createFixture(pl.Box(Wm + 1, 0.5, V(Wm / 2, -0.5)), { friction: 0.3 });
 
     buildDesk();
     buildItems();
@@ -778,12 +800,16 @@
     let muted = false;
     try { muted = localStorage.getItem('flippydesk.muted') === '1'; } catch (e) { /* storage blocked */ }
 
-    // Browsers only allow audio after a user gesture, so this runs on the
-    // first tap, click or key press.
+    // Browsers only allow audio after a user gesture, so this runs on every
+    // tap, click or key press until the audio context is running.
     function unlock() {
+      if (ac && ac.state === 'running') return;
       if (!ac) {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
+        // On iOS 17+, play through the silent switch like a game would; the
+        // page has its own mute button.
+        try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* unsupported */ }
         ac = new AC();
         master = ac.createGain();
         master.gain.value = muted ? 0 : 0.7;
@@ -794,7 +820,12 @@
         const d = noise.getChannelData(0);
         for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       }
-      if (ac.state !== 'running') ac.resume();
+      // iOS Safari only unlocks once a sound actually starts inside the gesture.
+      const blip = ac.createBufferSource();
+      blip.buffer = ac.createBuffer(1, 1, 22050);
+      blip.connect(ac.destination);
+      blip.start(0);
+      if (ac.state !== 'running') ac.resume().catch(() => {});
     }
 
     // Drop sounds when lots start at once, so a big crash doesn't clip.
@@ -895,7 +926,7 @@
   const GLASS = 'rgba(214,236,250,0.9)';
   const GRACE = 0.25;        // ignore the hits from the launch itself
   const MAX_SHARDS = 40;
-  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250 };
+  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250 };
 
   function makeScreen(b, x, y, w, h) {
     b.breakable = 'screen';
@@ -937,13 +968,14 @@
       if (b.breakable === 'screen') hitScreen(b, dv);
       else if (b.breakable === 'lamp' && dv > 2.6) breakApart(b, 'lamp', 'lamp smashed');
       else if (b.breakable === 'mug' && dv > 4) breakApart(b, 'mug', 'mug smashed');
+      else if (b.breakable === 'pot' && dv > 3.5) breakApart(b, 'pot', 'pot smashed');
     }
   }
 
   function breakApart(b, kind, label) {
     const c = b.getWorldCenter();
     b.shatter();
-    if (kind === 'mug') sfx.smash(); else sfx.shatter(0.7);
+    if (kind === 'lamp') sfx.shatter(0.7); else sfx.smash();
     addPoints(POINTS[kind], label, c.x, c.y);
     shake = Math.min(1, shake + 0.2);
   }
@@ -1054,9 +1086,20 @@
     const c = b.getWorldCenter();
     const v = b.getLinearVelocity();
     for (let i = 0; i < n * b.coffee; i++) {
-      drops.push({ x: c.x, y: c.y, vx: v.x + rand(-2.5, 2.5), vy: v.y + rand(-3, 0.5), r: rand(0.008, 0.02) });
+      drops.push(Object.assign({ x: c.x, y: c.y, vx: v.x + rand(-2.5, 2.5), vy: v.y + rand(-3, 0.5), r: rand(0.008, 0.02) }, COFFEE));
     }
     b.coffee = 0;
+  }
+
+  const COFFEE = { color: '#6b3f22', stain: 'rgba(92,55,30,0.55)' };
+  const DIRT = { color: '#5a3d2b', stain: 'rgba(74,50,34,0.9)' };
+
+  function spillDirt(b, n) {
+    const c = b.getWorldPoint(V(0, -0.1));
+    const v = b.getLinearVelocity();
+    for (let i = 0; i < n; i++) {
+      drops.push(Object.assign({ x: c.x + rand(-0.06, 0.06), y: c.y + rand(-0.05, 0.05), vx: v.x + rand(-2, 2), vy: v.y + rand(-2.5, 0.5), r: rand(0.01, 0.022) }, DIRT));
+    }
   }
 
   // ---------- score ----------
@@ -1128,7 +1171,7 @@
       const mouth = b.getWorldPoint(V(rand(-0.05, 0.05), -0.16));
       const v = b.getLinearVelocity();
       for (let i = 0; i < 2; i++) {
-        drops.push({ x: mouth.x, y: mouth.y, vx: v.x + rand(-0.8, 0.8), vy: v.y + rand(-0.8, 0.8), r: rand(0.008, 0.018) });
+        drops.push(Object.assign({ x: mouth.x, y: mouth.y, vx: v.x + rand(-0.8, 0.8), vy: v.y + rand(-0.8, 0.8), r: rand(0.008, 0.018) }, COFFEE));
       }
       b.coffee -= 0.012;
     }
@@ -1138,7 +1181,7 @@
       d.x += d.vx * dt;
       d.y += d.vy * dt;
       if (d.y >= floorY) {
-        if (d.x > 0 && d.x < Wm) stains.push({ x: d.x, r: d.r * rand(1.5, 3) });
+        if (d.x > 0 && d.x < Wm) stains.push({ x: d.x, r: d.r * rand(1.5, 3), color: d.stain });
         drops.splice(i, 1);
       }
     }
@@ -1242,9 +1285,9 @@
     ctx.fillStyle = 'rgba(0,0,0,0.08)';
     ctx.fillRect(0, floorY - 0.008, Wm, 0.008);
 
-    // coffee stains
-    ctx.fillStyle = 'rgba(92,55,30,0.55)';
+    // coffee stains and spilled dirt
     for (const s of stains) {
+      ctx.fillStyle = s.color;
       ctx.beginPath();
       ctx.ellipse(s.x, floorY + 0.02, s.r * 1.6, s.r * 0.45, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -1294,8 +1337,8 @@
     ctx.globalAlpha = 1;
     ctx.textAlign = 'start';
 
-    ctx.fillStyle = '#6b3f22';
     for (const d of drops) {
+      ctx.fillStyle = d.color;
       ctx.beginPath();
       ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
       ctx.fill();
@@ -1372,6 +1415,10 @@
   function showMute() {
     muteEl.textContent = sfx.muted ? '🔇' : '🔊';
     muteEl.setAttribute('aria-pressed', String(sfx.muted));
+  }
+  // Older iOS only counts touchend and click as gestures that can start audio.
+  for (const type of ['touchend', 'click', 'pointerup']) {
+    window.addEventListener(type, sfx.unlock, { passive: true });
   }
   muteEl.addEventListener('click', () => {
     sfx.unlock();
