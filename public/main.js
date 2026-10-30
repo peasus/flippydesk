@@ -1389,6 +1389,7 @@
     buildDesk();
     buildItems();
     placeDog();
+    schedulePal();
     bodies.sort((a, b) => a.z - b.z);
     lastDeskSpeed = 0;
   }
@@ -1732,6 +1733,132 @@
     if (boss.slide > 0.6) addPoints(300, 'boss startled', Wm - 0.5, floorY - 1.3);
     boss.mode = 'flee';
     boss.t = 0;
+  }
+
+  // ---------- chatty coworker ----------
+  // Once in a while a long-haired coworker leans in from the left with their
+  // phone and won't stop talking. Flipping the desk is the only way out.
+
+  const PAL_LINES = [
+    'Hey! Got a minute? Okay so my podcast...',
+    'Wanna see 400 photos of my sourdough?',
+    'So I’ve been getting really into crypto.',
+    'Is this your stapler? It’s mine now.',
+    'Have you tried standing meetings? Like, standing ON the desk?',
+    'Quick question. Not a question. A story.',
+    'My cousin says desks are a scam, actually.',
+    'Did you get my 14 reply-alls?',
+  ];
+  const PAL_LOOKS = [
+    { hair: '#6b3f22', hoodie: '#7cc58f', skin: '#f2c9a5', pants: '#4a4f5c' },
+    { hair: '#e0b84a', hoodie: '#b48be0', skin: '#f5d3b8', pants: '#3d4a6b' },
+    { hair: '#1d1c22', hoodie: '#f08a4b', skin: '#8d5a3b', pants: '#2f2c38' },
+  ];
+  const pal = { mode: 'away', slide: 0, due: Infinity, line: '', talkT: 0, look: PAL_LOOKS[0] };
+
+  // Called for each new desk: rarely, the coworker is coming.
+  function schedulePal() {
+    pal.due = chance(0.12) ? rand(1.5, 3) : Infinity;
+  }
+
+  function updatePal(dt) {
+    if (pal.mode === 'away' && state === 'ready' && idleT > pal.due) {
+      pal.due = Infinity;
+      Object.assign(pal, { mode: 'in', line: pick(PAL_LINES), talkT: -0.4, said: false, look: pick(PAL_LOOKS) });
+    }
+    if (pal.mode === 'in') {
+      pal.slide = Math.min(1, pal.slide + dt * 1.6);
+      pal.talkT += dt;
+      if (pal.talkT > 0 && !pal.said) {
+        pal.said = true;
+        sfx.mumble(Math.min(12, pal.line.split(' ').length + 3), 1.3);
+      }
+      if (pal.talkT > 3.6) {
+        pal.line = pick(PAL_LINES.filter((l) => l !== pal.line));
+        pal.talkT = 0;
+        pal.said = false;
+      }
+      if (state !== 'ready') {
+        if (pal.slide > 0.6) addPoints(400, 'coworker shooed', 0.6, floorY - 1.3);
+        pal.mode = 'flee';
+      } else if (boss.mode === 'in') {
+        pal.mode = 'flee';  // even they avoid the boss
+      }
+    }
+    if (pal.mode === 'flee') {
+      pal.slide = Math.max(0, pal.slide - dt * 4);
+      if (pal.slide === 0) pal.mode = 'away';
+    }
+  }
+
+  function drawPal() {
+    if (pal.slide <= 0) return;
+    const e = 1 - Math.pow(1 - pal.slide, 3);
+    const x = -0.45 + e * 0.8;
+    const L = pal.look;
+    const bob = pal.mode === 'in' ? Math.sin(clock * 9) * 0.008 : -0.05;
+    ctx.save();
+    ctx.translate(x, floorY + bob);
+    // hair hangs down the back, behind everything
+    rrect(-0.17, -1.62, 0.22, 0.5, 0.09, L.hair);
+    // legs and sneakers
+    rrect(-0.12, -0.78, 0.11, 0.76, 0.02, L.pants);
+    rrect(0.02, -0.78, 0.11, 0.76, 0.02, L.pants);
+    rrect(-0.14, -0.05, 0.15, 0.05, 0.025, '#f4f4f6');
+    rrect(0.0, -0.05, 0.15, 0.05, 0.025, '#f4f4f6');
+    // hoodie with pocket and strings
+    rrect(-0.19, -1.36, 0.38, 0.62, 0.09, L.hoodie);
+    rrect(-0.11, -0.98, 0.22, 0.12, 0.03, 'rgba(0,0,0,0.12)', false);
+    line(-0.03, -1.33, -0.035, -1.2, '#f4f4f6', 0.01);
+    line(0.03, -1.33, 0.035, -1.2, '#f4f4f6', 0.01);
+    // arm holding up a phone toward you
+    rrect(0.16, -1.3, 0.1, 0.3, 0.05, L.hoodie);
+    rrect(0.18, -1.08, 0.22, 0.09, 0.045, L.hoodie);
+    rrect(0.36, -1.2, 0.08, 0.15, 0.015, '#1d1c22');
+    rrect(0.37, -1.19, 0.06, 0.12, 0.008, pal.talkT % 0.8 < 0.4 ? '#f2c14e' : '#6b8fe6', false);
+    ellipse(0.39, -1.05, 0.03, 0.025, L.skin);
+    // head: big grin, eyebrows up
+    ellipse(0, -1.5, 0.13, 0.15, L.skin);
+    ctx.beginPath();
+    ctx.ellipse(-0.01, -1.56, 0.14, 0.12, 0, Math.PI * 0.95, Math.PI * 2.05);
+    ctx.fillStyle = L.hair;
+    ctx.fill();
+    rrect(-0.15, -1.58, 0.07, 0.3, 0.035, L.hair, false);
+    ellipse(0.02, -1.52, 0.01, 0.012, INK, false);
+    ellipse(0.075, -1.52, 0.01, 0.012, INK, false);
+    line(0.0, -1.565, 0.035, -1.575, INK, 0.007);
+    line(0.06, -1.575, 0.095, -1.565, INK, 0.007);
+    ctx.beginPath();
+    const open = pal.mode === 'in' && Math.sin(clock * 14) > 0;
+    if (open) ctx.ellipse(0.05, -1.44, 0.035, 0.022, 0, 0, Math.PI * 2);
+    else ctx.arc(0.05, -1.46, 0.04, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.lineWidth = 0.01;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPalBubble() {
+    if (pal.mode !== 'in' || pal.slide < 1) return;
+    ctx.save();
+    ctx.font = '600 0.07px ui-rounded, system-ui, sans-serif';
+    const maxW = Math.min(1.5, Wm - 0.6);
+    const lines = [''];
+    for (const w of pal.line.split(' ')) {
+      const next = lines[lines.length - 1] ? lines[lines.length - 1] + ' ' + w : w;
+      if (ctx.measureText(next).width > maxW && lines[lines.length - 1]) lines.push(w);
+      else lines[lines.length - 1] = next;
+    }
+    const lh = 0.085;
+    const bw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 0.12;
+    const bh = lines.length * lh + 0.08;
+    const bx = 0.55;
+    const by = floorY - 1.66 - bh;
+    poly([[bx + 0.04, by + bh - 0.01], [bx + 0.16, by + bh - 0.01], [bx - 0.04, by + bh + 0.1]], '#ffffff');
+    rrect(bx, by, bw, bh, 0.05, '#ffffff');
+    ctx.fillStyle = INK;
+    lines.forEach((l, i) => ctx.fillText(l, bx + 0.06, by + 0.04 + (i + 0.8) * lh));
+    ctx.restore();
   }
 
   function drawBoss() {
@@ -2575,6 +2702,7 @@
     updateCats(dt);
     updateDog(dt);
     updateBoss(dt);
+    updatePal(dt);
     for (const p of popups) p.t += dt;
     popups = popups.filter((p) => p.t < 1.4);
     if (state === 'flipped' && !landed) hangEl.textContent = `hang time ${hang.toFixed(2)}s`;
@@ -2857,6 +2985,7 @@
 
     drawRoom();
     drawBoss();
+    drawPal();
 
     for (const b of bodies) {
       const p = b.getPosition();
@@ -2870,6 +2999,7 @@
     for (const c of cats) drawCat(c);
     drawDog();
     drawBossBubble();
+    drawPalBubble();
 
     ctx.font = 'bold 0.075px ui-rounded, system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -3025,6 +3155,7 @@
     get bodies() { return bodies.length; },
     celebrate: () => celebrate(desk),
     get deskInfo() { return { cracks: desk.splits.length, drawers: bodies.filter(b => b.kind === "drawer").length }; },
+    pal: () => { pal.due = 0; },
     get dog() { return dog && dog.mode; },
     get arms() { return armJoints.map((a) => [a.broken ? 1 : 0, Math.round(a.max || 0)]); },
     get kinds() { return bodies.map((b) => b.kind); },
