@@ -11,6 +11,9 @@
   const ctx = canvas.getContext('2d');
   const hintEl = document.getElementById('hint');
   const countEl = document.getElementById('count');
+  const scoreEl = document.getElementById('score');
+  const scoreNumEl = scoreEl.querySelector('.num');
+  const hangEl = scoreEl.querySelector('.hang');
 
   const INK = '#2a2733';
   const LW = 0.011;              // outline width, in meters
@@ -90,8 +93,13 @@
   let state = 'ready';          // ready | flipped | fadeout | fadein
   let stateT = 0, fade = 0, shake = 0, idleT = 0, clock = 0;
   let lastDeskSpeed = 0;
-  let flips = 0;
-  try { flips = parseInt(localStorage.getItem('flippydesk.flips'), 10) || 0; } catch (e) { /* storage blocked */ }
+  let ground, floorFix, shardCount = 0, pinnedT = 0;
+  let score = 0, hang = 0, groundT = 0, landed = false, popups = [];
+  let flips = 0, best = 0;
+  try {
+    flips = parseInt(localStorage.getItem('flippydesk.flips'), 10) || 0;
+    best = parseInt(localStorage.getItem('flippydesk.best'), 10) || 0;
+  } catch (e) { /* storage blocked */ }
 
   function addBody(x, y, parts, draw, o = {}) {
     const b = world.createBody({
@@ -110,6 +118,7 @@
         density: p.d ?? o.density ?? 1,
         friction: o.friction ?? 0.55,
         restitution: o.restitution ?? 0.18,
+        filterGroupIndex: o.group || 0,
       });
     }
     b.draw = draw;
@@ -185,10 +194,11 @@
     return {
       w: 0.62,
       place(x, y) {
-        addBody(x, y, [R(-0.13, -0.03, 0.26, 0.03), R(-0.025, -0.17, 0.05, 0.14), R(-0.31, -0.54, 0.62, 0.38)], () => {
+        const b = addBody(x, y, [R(-0.13, -0.03, 0.26, 0.03), R(-0.025, -0.17, 0.05, 0.14), R(-0.31, -0.54, 0.62, 0.38)], () => {
           rrect(-0.025, -0.19, 0.05, 0.17, 0.005, '#5b6170');
           rrect(-0.13, -0.03, 0.26, 0.03, 0.012, '#4a4f5c');
           rrect(-0.31, -0.54, 0.62, 0.38, 0.025, '#2f3340');
+          if (b.dead) return rrect(-0.29, -0.52, 0.58, 0.32, 0.012, DEAD_SCREEN, false);
           const g = ctx.createLinearGradient(0, -0.52, 0, -0.19);
           g.addColorStop(0, hsl(hue, 70, 64));
           g.addColorStop(1, hsl(hue + 50, 70, 46));
@@ -197,6 +207,7 @@
           lines.forEach(([a, b], i) => line(-0.22 + a, -0.45 + i * 0.033, -0.22 + a + b * 0.8, -0.45 + i * 0.033, hsl(hue + i * 40, 55, 50), 0.012));
           ellipse(0.17, -0.3, 0.035, 0.035, 'rgba(255,255,255,0.35)', false);
         }, { kind: 'computer' });
+        makeScreen(b, -0.29, -0.52, 0.58, 0.32);
       },
     };
   }
@@ -206,15 +217,20 @@
     return {
       w: 0.46,
       place(x, y) {
-        addBody(x, y, [R(-0.23, -0.028, 0.46, 0.028), R(-0.2, -0.31, 0.4, 0.282)], () => {
+        const b = addBody(x, y, [R(-0.23, -0.028, 0.46, 0.028), R(-0.2, -0.31, 0.4, 0.282)], () => {
           rrect(-0.2, -0.31, 0.4, 0.29, 0.02, '#c9ccd3');
-          const g = ctx.createLinearGradient(0, -0.29, 0, -0.05);
-          g.addColorStop(0, hsl(hue, 60, 66));
-          g.addColorStop(1, hsl(hue + 40, 65, 48));
-          rrect(-0.18, -0.29, 0.36, 0.245, 0.01, g, false);
-          ellipse(0, -0.17, 0.04, 0.04, 'rgba(255,255,255,0.5)', false);
+          if (b.dead) {
+            rrect(-0.18, -0.29, 0.36, 0.245, 0.01, DEAD_SCREEN, false);
+          } else {
+            const g = ctx.createLinearGradient(0, -0.29, 0, -0.05);
+            g.addColorStop(0, hsl(hue, 60, 66));
+            g.addColorStop(1, hsl(hue + 40, 65, 48));
+            rrect(-0.18, -0.29, 0.36, 0.245, 0.01, g, false);
+            ellipse(0, -0.17, 0.04, 0.04, 'rgba(255,255,255,0.5)', false);
+          }
           rrect(-0.23, -0.028, 0.46, 0.028, 0.012, '#b3b7c0');
         }, { kind: 'computer' });
+        makeScreen(b, -0.18, -0.29, 0.36, 0.245);
       },
     };
   }
@@ -223,15 +239,18 @@
     return {
       w: 0.5,
       place(x, y) {
-        addBody(x, y, [R(-0.17, -0.04, 0.34, 0.04), R(-0.25, -0.46, 0.5, 0.42)], () => {
+        const b = addBody(x, y, [R(-0.17, -0.04, 0.34, 0.04), R(-0.25, -0.46, 0.5, 0.42)], () => {
           rrect(-0.17, -0.05, 0.34, 0.05, 0.01, '#d9cdb0');
           rrect(-0.25, -0.46, 0.5, 0.42, 0.04, '#e8dcc0');
-          rrect(-0.2, -0.42, 0.4, 0.3, 0.06, '#1f3a2c');
-          ctx.fillStyle = '#6dff9c';
-          ctx.font = 'bold 0.06px monospace';
-          ctx.fillText('C:\\>_', -0.16, -0.33);
+          rrect(-0.2, -0.42, 0.4, 0.3, 0.06, b.dead ? DEAD_SCREEN : '#1f3a2c');
+          if (!b.dead) {
+            ctx.fillStyle = '#6dff9c';
+            ctx.font = 'bold 0.06px monospace';
+            ctx.fillText('C:\\>_', -0.16, -0.33);
+          }
           rrect(0.12, -0.1, 0.06, 0.03, 0.01, '#c9bc9c');
         }, { kind: 'computer' });
+        makeScreen(b, -0.2, -0.42, 0.4, 0.3);
       },
     };
   }
@@ -290,7 +309,7 @@
     return {
       w: 0.2,
       place(x, y) {
-        const b = addBody(x - 0.02, y, [R(-0.07, -0.16, 0.14, 0.16), R(0.07, -0.13, 0.045, 0.09, { d: 0.3 })], () => {
+        const handle = () => {
           ctx.beginPath();
           ctx.ellipse(0.07, -0.085, 0.042, 0.042, 0, -Math.PI / 2, Math.PI / 2);
           ctx.lineCap = 'butt';
@@ -300,6 +319,9 @@
           ctx.strokeStyle = color;
           ctx.lineWidth = 0.014;
           ctx.stroke();
+        };
+        const b = addBody(x - 0.02, y, [R(-0.07, -0.16, 0.14, 0.16), R(0.07, -0.13, 0.045, 0.09, { d: 0.3 })], () => {
+          handle();
           rrect(-0.07, -0.16, 0.14, 0.16, 0.018, color);
           if (stripe) rrect(-0.07, -0.11, 0.14, 0.025, 0, 'rgba(255,255,255,0.55)', false);
           if (state === 'ready' && b.coffee > 0) {
@@ -321,6 +343,19 @@
           }
         }, { kind: 'mug' });
         b.coffee = 1;
+        b.breakable = 'mug';
+        // Two jagged halves and the handle.
+        const left = [[-0.07, 0], [0, 0], [0.012, -0.09], [-0.02, -0.16], [-0.07, -0.16]];
+        const right = [[0, 0], [0.07, 0], [0.07, -0.16], [-0.02, -0.16], [0.012, -0.09]];
+        b.shatter = () => {
+          spill(b, 30);
+          spawnShards(b, 0, -0.08, 3, color);
+          splitBody(b, [
+            { parts: [{ pts: left }], draw: () => poly(left, color) },
+            { parts: [{ pts: [[0, 0], [0.07, 0], [0.07, -0.16], [-0.02, -0.16]] }], draw: () => poly(right, color) },
+            { parts: [R(0.07, -0.13, 0.045, 0.09)], draw: handle, o: { density: 0.3 } },
+          ]);
+        };
       },
     };
   }
@@ -426,8 +461,30 @@
     return {
       w: 0.26,
       place(x, y) {
-        addBody(x - 0.02, y, [R(-0.09, -0.03, 0.18, 0.03), { x: 0.05, y: -0.165, w: 0.025, h: 0.29, a: armA },
-          { x: 0.02, y: -0.3, w: 0.2, h: 0.07, a: -0.5, d: 0.4 }], () => {
+        const baseR = R(-0.09, -0.03, 0.18, 0.03);
+        const armP = { x: 0.05, y: -0.165, w: 0.025, h: 0.29, a: armA };
+        const headP = { x: 0.02, y: -0.3, w: 0.2, h: 0.07, a: -0.5, d: 0.4 };
+        const drawArm = () => {
+          ctx.save();
+          ctx.translate(0.05, -0.165);
+          ctx.rotate(armA);
+          rrect(-0.0125, -0.15, 0.025, 0.3, 0.01, '#9aa0ad');
+          ctx.restore();
+        };
+        const drawHead = (lit) => {
+          ctx.save();
+          ctx.translate(0.02, -0.3);
+          ctx.rotate(-0.5);
+          if (lit) {
+            ellipse(-0.1, 0.005, 0.02, 0.028, '#fff2b3');
+          } else {
+            poly([[-0.1, -0.02], [-0.115, -0.005], [-0.105, 0.008], [-0.118, 0.022], [-0.1, 0.03]], '#5b6170');
+          }
+          poly([[-0.1, -0.035], [0.1, -0.02], [0.1, 0.02], [-0.1, 0.035]], color);
+          ctx.restore();
+        };
+        const drawBase = () => rrect(-0.09, -0.03, 0.18, 0.03, 0.012, color);
+        const b = addBody(x - 0.02, y, [baseR, armP, headP], () => {
           if (state === 'ready') {
             ctx.save();
             ctx.translate(0.02, -0.3);
@@ -442,19 +499,19 @@
             ctx.fill();
             ctx.restore();
           }
-          ctx.save();
-          ctx.translate(0.05, -0.165);
-          ctx.rotate(armA);
-          rrect(-0.0125, -0.15, 0.025, 0.3, 0.01, '#9aa0ad');
-          ctx.restore();
-          ctx.save();
-          ctx.translate(0.02, -0.3);
-          ctx.rotate(-0.5);
-          ellipse(-0.1, 0.005, 0.02, 0.028, '#fff2b3');
-          poly([[-0.1, -0.035], [0.1, -0.02], [0.1, 0.02], [-0.1, 0.035]], color);
-          ctx.restore();
-          rrect(-0.09, -0.03, 0.18, 0.03, 0.012, color);
+          drawArm();
+          drawHead(true);
+          drawBase();
         }, { kind: 'lamp' });
+        b.breakable = 'lamp';
+        b.shatter = () => {
+          spawnShards(b, -0.065, -0.248, 4, '#fff2b3');
+          splitBody(b, [
+            { parts: [baseR], draw: drawBase },
+            { parts: [armP], draw: drawArm },
+            { parts: [headP], draw: () => drawHead(false), o: { density: 0.4 } },
+          ]);
+        };
       },
     };
   }
@@ -640,10 +697,17 @@
     drops = [];
     stains = [];
 
-    const ground = world.createBody();
-    ground.createFixture(pl.Box(Wm, 1, V(Wm / 2, floorY + 1)), { friction: 0.8 });
-    ground.createFixture(pl.Box(0.5, 20, V(-0.5, floorY - 19)), { friction: 0.3 });
-    ground.createFixture(pl.Box(0.5, 20, V(Wm + 0.5, floorY - 19)), { friction: 0.3 });
+    shardCount = 0;
+    popups = [];
+    world.on('post-solve', onPostSolve);
+
+    ground = world.createBody();
+    floorFix = ground.createFixture(pl.Box(Wm, 1, V(Wm / 2, floorY + 1)), { friction: 0.8 });
+    // Frictionless side walls so things slide down them instead of sticking.
+    ground.createFixture(pl.Box(0.5, 20, V(-0.5, floorY - 19)), { friction: 0 });
+    ground.createFixture(pl.Box(0.5, 20, V(Wm + 0.5, floorY - 19)), { friction: 0 });
+    // A ceiling at the top of the screen keeps everything in view.
+    ground.createFixture(pl.Box(Wm + 1, 0.5, V(Wm / 2, -0.5)), { friction: 0.3 });
 
     buildDesk();
     buildItems();
@@ -678,17 +742,244 @@
     idleT = 0;
     flips++;
     try { localStorage.setItem('flippydesk.flips', String(flips)); } catch (e) { /* storage blocked */ }
-    updateCount();
+    score = 0;
+    hang = 0;
+    groundT = 0;
+    landed = false;
+    pinnedT = 0;
+    updateScore();
 
+    // strength runs from about 0.3 (a lazy drag) to 2.6 (a hard flick). Lift
+    // grows linearly with it, spin and scatter a little slower, so gentle
+    // swipes tip the desk over and hard ones send it cartwheeling.
     const m = desk.getMass();
-    const p = desk.getWorldPoint(V(side * rand(0.3, 0.45), 0));
-    desk.applyLinearImpulse(V(m * sideways * 2.5, -m * 10 * strength), p, true);
+    const spin = Math.sqrt(strength);
+    const p = desk.getWorldPoint(V(side * rand(0.3, 0.45) * clamp(spin, 0.7, 1.3), 0));
+    desk.applyLinearImpulse(V(m * sideways * 2.5 * spin, -m * 7 * strength), p, true);
     for (const b of bodies) {
       if (b === desk) continue;
       const v = b.getLinearVelocity();
-      b.setLinearVelocity(V(v.x + rand(-2.5, 2.5) + sideways * 2 - side * rand(0, 1.5), v.y - rand(3, 7.5) * strength));
-      b.setAngularVelocity(rand(-9, 9));
+      b.setLinearVelocity(V(
+        v.x + (rand(-2.5, 2.5) + sideways * 2 - side * rand(0, 1.5)) * spin,
+        v.y - rand(2, 6.5) * strength,
+      ));
+      b.setAngularVelocity(rand(-9, 9) * spin);
       b.setAwake(true);
+    }
+  }
+
+  // ---------- breaking things ----------
+
+  const DEAD_SCREEN = '#15171d';
+  const GLASS = 'rgba(214,236,250,0.9)';
+  const GRACE = 0.25;        // ignore the hits from the launch itself
+  const MAX_SHARDS = 40;
+  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250 };
+
+  function makeScreen(b, x, y, w, h) {
+    b.breakable = 'screen';
+    b.screen = { x, y, w, h };
+    b.cracks = [];
+  }
+
+  // Record the hardest hit each breakable body took during a physics step,
+  // as a change in velocity (impulse / mass), so heavy things need bigger hits.
+  function onPostSolve(contact, impulse) {
+    if (state !== 'flipped' || stateT < GRACE) return;
+    const n = contact.getManifold().pointCount;
+    let total = 0;
+    for (let i = 0; i < n; i++) total += impulse.normalImpulses[i];
+    for (const b of [contact.getFixtureA().getBody(), contact.getFixtureB().getBody()]) {
+      if (!b.breakable) continue;
+      const dv = total / b.getMass();
+      if (dv > (b.hit || 0)) b.hit = dv;
+    }
+  }
+
+  // Bodies can't be created or destroyed mid-step, so breaking happens here.
+  function processHits() {
+    for (const b of bodies.slice()) {
+      const dv = b.hit;
+      if (!dv) continue;
+      b.hit = 0;
+      if (b.breakable === 'screen') hitScreen(b, dv);
+      else if (b.breakable === 'lamp' && dv > 2.6) breakApart(b, 'lamp', 'lamp smashed');
+      else if (b.breakable === 'mug' && dv > 4) breakApart(b, 'mug', 'mug smashed');
+    }
+  }
+
+  function breakApart(b, kind, label) {
+    const c = b.getWorldCenter();
+    b.shatter();
+    addPoints(POINTS[kind], label, c.x, c.y);
+    shake = Math.min(1, shake + 0.2);
+  }
+
+  function hitScreen(b, dv) {
+    if (b.dead || dv < 2.2) return;
+    b.cracks.push(makeCrack(b.screen, dv));
+    const s = b.screen;
+    const c = b.getWorldPoint(V(s.x + s.w / 2, s.y + s.h / 2));
+    shake = Math.min(1, shake + 0.15);
+    if (b.cracks.length >= 3 || dv > 7) {
+      b.dead = true;
+      spawnShards(b, s.x + s.w / 2, s.y + s.h / 2, randInt(4, 7), GLASS);
+      addPoints(POINTS.screen, 'screen smashed', c.x, c.y);
+    } else {
+      addPoints(POINTS.crack, 'cracked', c.x, c.y);
+    }
+  }
+
+  function makeCrack(s, dv) {
+    const x0 = rand(s.x + s.w * 0.15, s.x + s.w * 0.85);
+    const y0 = rand(s.y + s.h * 0.15, s.y + s.h * 0.85);
+    const size = clamp(0.06 + dv * 0.03, 0.08, 0.35);
+    const rays = [];
+    const n = randInt(5, 9);
+    for (let i = 0; i < n; i++) {
+      let a = (i / n) * Math.PI * 2 + rand(-0.3, 0.3);
+      let x = x0, y = y0;
+      const pts = [[x, y]];
+      const segs = randInt(3, 5);
+      const step = (size * rand(0.5, 1.1)) / segs;
+      for (let k = 0; k < segs; k++) {
+        a += rand(-0.45, 0.45);
+        x += Math.cos(a) * step;
+        y += Math.sin(a) * step;
+        pts.push([x, y]);
+      }
+      rays.push(pts);
+    }
+    return { x: x0, y: y0, rays, ring: rays.map((r) => r[1]) };
+  }
+
+  function drawCracks(b) {
+    const s = b.screen;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(s.x, s.y, s.w, s.h);
+    ctx.clip();
+    ctx.lineCap = 'round';
+    for (const c of b.cracks) {
+      for (const [color, width] of [['rgba(0,0,0,0.35)', 0.01], ['rgba(255,255,255,0.9)', 0.005]]) {
+        ctx.beginPath();
+        for (const r of c.rays) {
+          ctx.moveTo(r[0][0], r[0][1]);
+          for (const p of r) ctx.lineTo(p[0], p[1]);
+        }
+        ctx.moveTo(c.ring[0][0], c.ring[0][1]);
+        for (const p of c.ring) ctx.lineTo(p[0], p[1]);
+        ctx.closePath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 0.012, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Small triangle bodies flung out from a point on body b (local coords).
+  function spawnShards(b, lx, ly, n, color) {
+    const wp = b.getWorldPoint(V(lx, ly));
+    const v = b.getLinearVelocityFromWorldPoint(wp);
+    for (let i = 0; i < n && shardCount < MAX_SHARDS; i++, shardCount++) {
+      const s = rand(0.02, 0.045);
+      const pts = [[0, -s], [s * rand(0.6, 1), s * rand(0.2, 0.8)], [-s * rand(0.6, 1), s * rand(0.2, 0.8)]];
+      const sh = addBody(wp.x + rand(-0.05, 0.05), wp.y + rand(-0.05, 0.05), [{ pts }], () => poly(pts, color),
+        { kind: 'shard', group: -1, density: 0.5, z: 2, angle: rand(0, 6.28) });
+      sh.setLinearVelocity(V(v.x + rand(-2.5, 2.5), v.y + rand(-3.5, 0.5)));
+      sh.setAngularVelocity(rand(-15, 15));
+    }
+    bodies.sort((a, c) => a.z - c.z);
+  }
+
+  // Replace body b with pieces that share its frame, so each piece's local
+  // coordinates match the original drawing.
+  function splitBody(b, pieces) {
+    const pos = b.getPosition();
+    const angle = b.getAngle();
+    const w = b.getAngularVelocity();
+    for (const pc of pieces) {
+      const nb = addBody(pos.x, pos.y, pc.parts, pc.draw, Object.assign({ angle, kind: b.kind + '-piece', z: b.z }, pc.o));
+      const v = b.getLinearVelocityFromWorldPoint(nb.getWorldCenter());
+      nb.setLinearVelocity(V(v.x + rand(-1.2, 1.2), v.y + rand(-1.5, 0.3)));
+      nb.setAngularVelocity(w + rand(-6, 6));
+    }
+    world.destroyBody(b);
+    bodies.splice(bodies.indexOf(b), 1);
+    bodies.sort((a, c) => a.z - c.z);
+  }
+
+  function spill(b, n) {
+    if (!(b.coffee > 0)) return;
+    const c = b.getWorldCenter();
+    const v = b.getLinearVelocity();
+    for (let i = 0; i < n * b.coffee; i++) {
+      drops.push({ x: c.x, y: c.y, vx: v.x + rand(-2.5, 2.5), vy: v.y + rand(-3, 0.5), r: rand(0.008, 0.02) });
+    }
+    b.coffee = 0;
+  }
+
+  // ---------- score ----------
+
+  function addPoints(n, label, x, y) {
+    score += n;
+    popups.push({ x: clamp(x, 0.7, Wm - 0.7), y: Math.max(y, 1), text: `+${n} ${label}`, t: 0 });
+    updateScore();
+  }
+
+  function deskOnFloor() {
+    for (let ce = desk.getContactList(); ce; ce = ce.next) {
+      const c = ce.contact;
+      if (c.isTouching() && (c.getFixtureA() === floorFix || c.getFixtureB() === floorFix)) return true;
+    }
+    return false;
+  }
+
+  // Hang time adds up every moment the desk is fully off the floor. It is
+  // scored once the desk has been back on the floor for a moment.
+  function trackHang(dt) {
+    if (state !== 'flipped' || landed) return;
+    if (!deskOnFloor()) {
+      // Resting on top of other stuff doesn't count as hanging.
+      if (desk.getLinearVelocity().length() > 0.5) hang += dt;
+      groundT = 0;
+    } else if (hang > 0 && (groundT += dt) > 0.6) {
+      awardHang();
+    }
+  }
+
+  function awardHang() {
+    if (landed) return;
+    landed = true;
+    const p = desk.getWorldCenter();
+    if (hang > 0.05) addPoints(Math.round(hang * 100) * 10, `hang time ${hang.toFixed(2)}s`, p.x, p.y - 0.4);
+  }
+
+  function updateScore() {
+    if (state === 'ready' || state === 'fadein') {
+      scoreEl.classList.remove('show');
+    } else {
+      scoreEl.classList.add('show');
+      scoreNumEl.textContent = score.toLocaleString();
+      hangEl.textContent = `hang time ${hang.toFixed(2)}s`;
+    }
+    countEl.textContent = [
+      state === 'ready' && score ? `last ${score.toLocaleString()}` : '',
+      best ? `best ${best.toLocaleString()}` : '',
+      flips ? `${flips} flipped` : '',
+    ].filter(Boolean).join(' · ');
+  }
+
+  function finishRound() {
+    awardHang();
+    if (score > best) {
+      best = score;
+      try { localStorage.setItem('flippydesk.best', String(best)); } catch (e) { /* storage blocked */ }
     }
   }
 
@@ -720,6 +1011,18 @@
     const jolt = lastDeskSpeed - speed;
     if (jolt > 2.5) shake = Math.min(1, shake + jolt * 0.08);
     lastDeskSpeed = speed;
+
+    trackHang(dt);
+
+    // On narrow screens the desk can end up standing on end, leaning on a
+    // wall. If it sits there, tip its top back toward the middle.
+    const c = desk.getWorldCenter();
+    const leaning = Math.abs(Math.sin(desk.getAngle())) > 0.35 && Math.min(c.x, Wm - c.x) < 0.75;
+    pinnedT = state === 'flipped' && stateT > 1 && leaning && speed < 0.8 ? pinnedT + dt : 0;
+    if (pinnedT > 0.3) {
+      const toward = c.x < cx ? 1 : -1;
+      desk.applyForce(V(toward * desk.getMass() * 14, 0), V(c.x, c.y - 0.8), true);
+    }
   }
 
   // ---------- main loop ----------
@@ -732,9 +1035,13 @@
     acc += dt;
     while (acc >= STEP) {
       world.step(STEP, 8, 3);
+      processHits();
       stepExtras(STEP);
       acc -= STEP;
     }
+    for (const p of popups) p.t += dt;
+    popups = popups.filter((p) => p.t < 1.4);
+    if (state === 'flipped' && !landed) hangEl.textContent = `hang time ${hang.toFixed(2)}s`;
     shake = Math.max(0, shake - dt * 2.5);
     stateT += dt;
 
@@ -744,14 +1051,14 @@
       if (stateT > RESET_AFTER) {
         let moving = false;
         for (const b of bodies) if (b.getLinearVelocity().length() > 1.2) { moving = true; break; }
-        if (!moving || stateT > RESET_MAX) { state = 'fadeout'; stateT = 0; }
+        if (!moving || stateT > RESET_MAX) { state = 'fadeout'; stateT = 0; finishRound(); }
       }
     } else if (state === 'fadeout') {
       fade = Math.min(1, stateT / FADE);
-      if (fade >= 1) { buildScene(); state = 'fadein'; stateT = 0; }
+      if (fade >= 1) { buildScene(); state = 'fadein'; stateT = 0; updateScore(); }
     } else if (state === 'fadein') {
       fade = Math.max(0, 1 - stateT / FADE);
-      if (fade <= 0) { state = 'ready'; stateT = 0; idleT = 0; }
+      if (fade <= 0) { state = 'ready'; stateT = 0; idleT = 0; updateScore(); }
     }
     hintEl.classList.toggle('show', state === 'ready' && idleT > (flips ? 3 : 0.8));
   }
@@ -833,8 +1140,23 @@
       ctx.translate(p.x, p.y);
       ctx.rotate(b.getAngle());
       b.draw();
+      if (b.cracks && b.cracks.length) drawCracks(b);
       ctx.restore();
     }
+
+    ctx.font = 'bold 0.075px ui-rounded, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 0.018;
+    ctx.strokeStyle = INK;
+    ctx.fillStyle = '#ffd84d';
+    for (const p of popups) {
+      ctx.globalAlpha = Math.min(1, (1.4 - p.t) * 2.5);
+      const y = p.y - 0.15 - p.t * 0.35;
+      ctx.strokeText(p.text, p.x, y);
+      ctx.fillText(p.text, p.x, y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'start';
 
     ctx.fillStyle = '#6b3f22';
     for (const d of drops) {
@@ -858,10 +1180,6 @@
     requestAnimationFrame(frame);
   }
 
-  function updateCount() {
-    countEl.textContent = flips ? `${flips} flipped` : '';
-  }
-
   // ---------- input ----------
 
   let swipe = null;
@@ -870,37 +1188,46 @@
     return (floorY - DESK_H) * ppm;
   }
 
-  function tryFlip(e, minDist) {
-    if (!swipe) return;
+  // Track the fastest upward speed seen during the swipe (px per ms, over a
+  // short window), and flip once the finger has travelled far enough or lifts.
+  function trackSwipe(e) {
     const now = performance.now();
     swipe.pts.push([e.clientX, e.clientY, now]);
-    while (swipe.pts.length > 2 && now - swipe.pts[0][2] > 120) swipe.pts.shift();
-    const dy = swipe.y0 - e.clientY;
-    if (dy < minDist) return;
+    while (swipe.pts.length > 2 && now - swipe.pts[0][2] > 60) swipe.pts.shift();
     const [px, py, pt] = swipe.pts[0];
-    const ms = Math.max(16, now - pt);
-    const vy = (py - e.clientY) / ms;          // px per ms, upward positive
-    const vx = (e.clientX - px) / ms;
-    const strength = clamp(0.75 + vy / 2.5, 0.75, 1.6);
+    const ms = Math.max(25, now - pt);
+    const vy = (py - e.clientY) / ms;
+    if (vy > swipe.peak) {
+      swipe.peak = vy;
+      swipe.vx = (e.clientX - px) / ms;
+    }
+  }
+
+  function tryFlip(e, minDist) {
+    if (!swipe) return;
+    trackSwipe(e);
+    if (swipe.y0 - e.clientY < minDist) return;
+    // ~0.5 px/ms is a slow drag, ~2 a normal swipe, 5+ a hard flick.
+    const strength = clamp(0.2 + swipe.peak * 0.45, 0.3, 2.6);
     const deskX = swipe.x0 / ppm - cx;
     const side = Math.abs(deskX) > 0.15 ? Math.sign(deskX) : (chance(0.5) ? 1 : -1);
-    flip(strength, side, clamp(vx / 1.5, -1, 1));
+    flip(strength, side, clamp(swipe.vx / 2, -1, 1));
     swipe = null;
   }
 
   canvas.addEventListener('pointerdown', (e) => {
     if (state !== 'ready') return;
     if (e.clientY < deskTopPx() - 30) return;  // swipes start at the desk, not above it
-    swipe = { x0: e.clientX, y0: e.clientY, pts: [[e.clientX, e.clientY, performance.now()]] };
+    swipe = { x0: e.clientX, y0: e.clientY, peak: 0, vx: 0, pts: [[e.clientX, e.clientY, performance.now()]] };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
   });
-  canvas.addEventListener('pointermove', (e) => tryFlip(e, 60));
-  canvas.addEventListener('pointerup', (e) => { tryFlip(e, 30); swipe = null; });
+  canvas.addEventListener('pointermove', (e) => tryFlip(e, 110));
+  canvas.addEventListener('pointerup', (e) => { tryFlip(e, 25); swipe = null; });
   canvas.addEventListener('pointercancel', () => { swipe = null; });
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' || e.code === 'ArrowUp') {
       e.preventDefault();
-      flip(rand(1, 1.3), chance(0.5) ? 1 : -1, rand(-0.4, 0.4));
+      flip(rand(1, 1.8), chance(0.5) ? 1 : -1, rand(-0.4, 0.4));
     }
   });
 
@@ -911,9 +1238,15 @@
   });
 
   // Expose a tiny hook for automated testing.
-  window.flippyDesk = { flip: () => flip(1.2, 1, 0), get state() { return state; } };
+  window.flippyDesk = {
+    flip: (s = 1.2) => flip(s, 1, 0),
+    get state() { return state; },
+    get score() { return score; },
+    get hang() { return hang; },
+    get bodies() { return bodies.length; },
+  };
 
   resize();
-  updateCount();
+  updateScore();
   requestAnimationFrame(frame);
 })();
