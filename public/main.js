@@ -692,8 +692,10 @@
     if (chance(0.9)) extras.push(mug());
     if (chance(0.85)) extras.push(chance(0.5) ? bookStack() : booksUpright());
     if (chance(0.85)) extras.push(plant());
+    const kitty = chance(0.7) ? cat() : null;
     for (const make of shuffle(EXTRAS.slice()).slice(0, randInt(1, 4))) extras.push(make());
     shuffle(extras);
+    if (kitty) extras.unshift(kitty);  // the fit below drops from the end
 
     const GAP = 0.015;
     const widthOf = (list) => list.reduce((s, it) => s + it.w, 0) + GAP * (list.length - 1);
@@ -724,7 +726,10 @@
 
     shardCount = 0;
     popups = [];
+    cats = [];
+    grab = null;
     world.on('post-solve', onPostSolve);
+    world.on('begin-contact', onBeginContact);
 
     ground = world.createBody();
     floorFix = ground.createFixture(pl.Box(Wm, 1, V(Wm / 2, floorY + 1)), { friction: 0.8 });
@@ -756,10 +761,272 @@
     fade = 0;
   }
 
+  // ---------- the cat ----------
+  // Cats aren't physics bodies: one naps on the desk, then on a flip it
+  // wakes, leaps clear and sits on the floor looking unimpressed.
+
+  let cats = [];
+  const CAT_COATS = [
+    { fur: '#f0a35e', dark: '#d9823e' },
+    { fur: '#3b3a44', dark: '#2a2733' },
+    { fur: '#f4f4f6', dark: '#d9d4c8' },
+    { fur: '#9aa0ad', dark: '#7d8391' },
+  ];
+
+  function cat() {
+    const coat = pick(CAT_COATS);
+    const dir = chance(0.5) ? 1 : -1;
+    return {
+      w: 0.3,
+      place(x, y) {
+        cats.push({ lx: x - cx, ly: y - floorY, coat, dir, mode: 'sleep', t: 0 });
+      },
+    };
+  }
+
+  function wakeCats() {
+    for (const c of cats) {
+      if (c.mode !== 'sleep') continue;
+      const p = desk.getWorldPoint(V(c.lx, c.ly));
+      Object.assign(c, { mode: 'alert', t: 0, x: p.x, y: p.y, a: desk.getAngle() });
+      sfx.meow();
+    }
+  }
+
+  function updateCats(dt) {
+    for (const c of cats) {
+      c.t += dt;
+      if (c.mode === 'alert' && c.t > 0.15) {
+        // Jump toward whichever side of the screen is nearer.
+        c.mode = 'jump';
+        c.t = 0;
+        c.sx = c.x;
+        c.sy = c.y;
+        c.tx = c.x < cx ? rand(0.25, 0.45) : Wm - rand(0.25, 0.45);
+        c.dir = c.tx < c.x ? -1 : 1;
+        c.dur = 0.6;
+      } else if (c.mode === 'jump') {
+        const k = Math.min(1, c.t / c.dur);
+        c.x = c.sx + (c.tx - c.sx) * k;
+        c.y = c.sy + (floorY - c.sy) * k - Math.sin(k * Math.PI) * 0.6;
+        c.a = 0;
+        if (k >= 1) {
+          c.mode = 'sit';
+          c.t = 0;
+          c.dir = -c.dir;  // turn around to watch the mess
+        }
+      }
+    }
+  }
+
+  function drawCat(c) {
+    const { fur, dark } = c.coat;
+    ctx.save();
+    if (c.mode === 'sleep') {
+      const p = desk.getWorldPoint(V(c.lx, c.ly));
+      ctx.translate(p.x, p.y);
+      ctx.rotate(desk.getAngle());
+    } else {
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.a || 0);
+    }
+    ctx.scale(c.dir, 1);
+    const ear = (x, y, s) => poly([[x - s, y], [x + s * 0.2, y - s * 1.6], [x + s, y]], fur);
+    const eye = (x, y, open) => {
+      if (open) ellipse(x, y, 0.008, 0.012, INK, false);
+      else line(x - 0.01, y, x + 0.01, y, INK, 0.006);
+    };
+    if (c.mode === 'sleep') {
+      // A loaf with its tail wrapped round the front.
+      ellipse(0, -0.06, 0.13, 0.06, fur);
+      ear(0.06, -0.1, 0.022);
+      ear(0.115, -0.1, 0.022);
+      ellipse(0.09, -0.065, 0.055, 0.045, fur);
+      eye(0.07, -0.07, false);
+      eye(0.11, -0.07, false);
+      ctx.beginPath();
+      ctx.ellipse(-0.02, -0.01, 0.12, 0.025, 0, 0, Math.PI);
+      ctx.lineWidth = 0.03;
+      ctx.strokeStyle = INK;
+      ctx.stroke();
+      ctx.lineWidth = 0.016;
+      ctx.strokeStyle = dark;
+      ctx.stroke();
+      ctx.restore();
+      // Zzz floats up in screen space.
+      const p = desk.getWorldPoint(V(c.lx, c.ly - 0.14));
+      ctx.save();
+      ctx.font = 'bold 0.05px ui-rounded, system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(42,39,51,0.55)';
+      for (let i = 0; i < 3; i++) {
+        const k = (clock * 0.5 + i / 3) % 1;
+        ctx.globalAlpha = Math.sin(k * Math.PI);
+        ctx.fillText('z', p.x + k * 0.1 * c.dir, p.y - k * 0.15);
+      }
+      ctx.restore();
+      return;
+    }
+    if (c.mode === 'jump') {
+      // Stretched out mid-leap.
+      ctx.beginPath();
+      ctx.moveTo(-0.1, -0.06);
+      ctx.quadraticCurveTo(-0.2, -0.12, -0.24, -0.04);
+      ctx.lineWidth = 0.026;
+      ctx.strokeStyle = INK;
+      ctx.stroke();
+      ctx.lineWidth = 0.012;
+      ctx.strokeStyle = fur;
+      ctx.stroke();
+      line(0.07, -0.04, 0.14, -0.01, INK, 0.018);
+      line(-0.07, -0.05, -0.14, -0.01, INK, 0.018);
+      ellipse(0, -0.06, 0.13, 0.04, fur);
+      ear(0.13, -0.1, 0.02);
+      ear(0.17, -0.1, 0.02);
+      ellipse(0.15, -0.075, 0.045, 0.04, fur);
+      eye(0.165, -0.08, true);
+      ctx.restore();
+      return;
+    }
+    // Sitting (or startled, ears up).
+    const swish = Math.sin(clock * 3) * 0.03;
+    ctx.beginPath();
+    ctx.moveTo(-0.05, -0.01);
+    ctx.quadraticCurveTo(-0.16, 0, -0.14 + swish, -0.09);
+    ctx.lineWidth = 0.026;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    ctx.lineWidth = 0.012;
+    ctx.strokeStyle = fur;
+    ctx.stroke();
+    ellipse(0, -0.08, 0.065, 0.08, fur);
+    ellipse(0.02, -0.01, 0.03, 0.012, fur);
+    ear(-0.025, -0.24, 0.022);
+    ear(0.03, -0.24, 0.022);
+    ellipse(0.005, -0.2, 0.052, 0.045, fur);
+    const blink = c.mode === 'sit' && (clock % 3.2) < 0.12;
+    eye(-0.012, -0.205, !blink);
+    eye(0.025, -0.205, !blink);
+    if (c.mode === 'alert') {
+      ctx.font = 'bold 0.09px ui-rounded, system-ui, sans-serif';
+      ctx.fillStyle = INK;
+      ctx.fillText('!', 0.06, -0.27);
+    }
+    ctx.restore();
+  }
+
+  // ---------- the boss ----------
+  // An original nosy manager who wanders in, mug in hand, if you stand
+  // around too long without flipping anything.
+
+  const BOSS_IDLE = 6;
+  const BOSS_LINES = [
+    'So... just circling back on that report.',
+    'Got a sec? Quick sync about the report.',
+    'Per my last email... the report?',
+    'Love the energy! Report by end of day?',
+    'Hey buddy. That report. Any update?',
+  ];
+  const boss = { mode: 'away', t: 0, slide: 0, line: '' };
+
+  function updateBoss(dt) {
+    boss.t += dt;
+    if (boss.mode === 'away' && state === 'ready' && idleT > BOSS_IDLE) {
+      Object.assign(boss, { mode: 'in', t: 0, line: pick(BOSS_LINES) });
+      sfx.ding(false);
+    }
+    if (boss.mode === 'in') boss.slide = Math.min(1, boss.slide + dt * 2);
+    if (boss.mode === 'flee') {
+      boss.slide = Math.max(0, boss.slide - dt * 4);
+      if (boss.slide === 0) boss.mode = 'away';
+    }
+    if (boss.mode === 'in' && state !== 'ready') bossFlee();
+  }
+
+  function bossFlee() {
+    if (boss.mode !== 'in') return;
+    if (boss.slide > 0.6) addPoints(300, 'boss startled', Wm - 0.5, floorY - 1.3);
+    boss.mode = 'flee';
+    boss.t = 0;
+  }
+
+  function drawBoss() {
+    if (boss.slide <= 0) return;
+    const e = 1 - Math.pow(1 - boss.slide, 3);
+    const x = Wm + 0.45 - e * 0.85;
+    const y = floorY;
+    const jolt = boss.mode === 'flee' ? -0.05 : 0;
+    ctx.save();
+    ctx.translate(x, y + jolt);
+    // legs and shoes
+    rrect(-0.14, -0.8, 0.12, 0.78, 0.02, '#4a4f5c');
+    rrect(0.02, -0.8, 0.12, 0.78, 0.02, '#4a4f5c');
+    rrect(-0.17, -0.04, 0.15, 0.04, 0.02, INK);
+    rrect(0.0, -0.04, 0.15, 0.04, 0.02, INK);
+    // shirt, belt, tie
+    rrect(-0.2, -1.38, 0.4, 0.62, 0.08, '#cfe0f5');
+    rrect(-0.2, -0.82, 0.4, 0.05, 0.01, '#5b3a2a');
+    poly([[-0.03, -1.35], [0.03, -1.35], [0.045, -0.95], [0, -0.9], [-0.045, -0.95]], '#e66b6b');
+    // arm holding a mug
+    rrect(-0.3, -1.32, 0.1, 0.42, 0.05, '#cfe0f5');
+    rrect(-0.38, -1.05, 0.16, 0.08, 0.04, '#cfe0f5');
+    rrect(-0.47, -1.1, 0.11, 0.13, 0.015, '#f4f4f6');
+    ctx.save();
+    ctx.font = 'bold 0.03px ui-rounded, system-ui, sans-serif';
+    ctx.fillStyle = '#e66b6b';
+    ctx.fillText('#1', -0.45, -1.03);
+    ctx.restore();
+    // head: thinning hair, glasses, polite smile
+    ellipse(0, -1.5, 0.13, 0.15, '#f2c9a5');
+    for (const [a0, a1] of [[0.82, 1.12], [-0.12, 0.18]]) {
+      ctx.beginPath();
+      ctx.ellipse(0, -1.52, 0.135, 0.14, 0, Math.PI * a0, Math.PI * a1);
+      ctx.lineWidth = 0.04;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#8a8f99';
+      ctx.stroke();
+    }
+    ellipse(-0.05, -1.52, 0.035, 0.03, 'rgba(255,255,255,0.4)');
+    ellipse(0.05, -1.52, 0.035, 0.03, 'rgba(255,255,255,0.4)');
+    line(-0.015, -1.52, 0.015, -1.52, INK, 0.008);
+    ellipse(-0.05, -1.52, 0.008, 0.008, INK, false);
+    ellipse(0.05, -1.52, 0.008, 0.008, INK, false);
+    ctx.beginPath();
+    if (boss.mode === 'flee') ctx.ellipse(0, -1.43, 0.025, 0.02, 0, 0, Math.PI * 2);
+    else ctx.arc(0, -1.46, 0.04, 0.2 * Math.PI, 0.8 * Math.PI);
+    ctx.lineWidth = 0.01;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBossBubble() {
+    if (boss.mode !== 'in' || boss.slide < 1) return;
+    ctx.save();
+    ctx.font = '600 0.07px ui-rounded, system-ui, sans-serif';
+    const maxW = Math.min(1.5, Wm - 0.6);
+    const words = boss.line.split(' ');
+    const lines = [''];
+    for (const w of words) {
+      const next = lines[lines.length - 1] ? lines[lines.length - 1] + ' ' + w : w;
+      if (ctx.measureText(next).width > maxW && lines[lines.length - 1]) lines.push(w);
+      else lines[lines.length - 1] = next;
+    }
+    const lh = 0.085;
+    const bw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 0.12;
+    const bh = lines.length * lh + 0.08;
+    const bx = Wm - 0.45 - bw;
+    const by = floorY - 1.75 - bh;
+    poly([[bx + bw - 0.18, by + bh - 0.01], [bx + bw - 0.06, by + bh - 0.01], [bx + bw + 0.02, by + bh + 0.1]], '#ffffff');
+    rrect(bx, by, bw, bh, 0.05, '#ffffff');
+    ctx.fillStyle = INK;
+    lines.forEach((l, i) => ctx.fillText(l, bx + 0.06, by + 0.04 + (i + 0.8) * lh));
+    ctx.restore();
+  }
+
   // ---------- flipping ----------
 
-  function flip(strength, side, sideways) {
-    if (state !== 'ready') return;
+  // Starts a round: the scoring, breakage and reset timer all run from here.
+  function startRound() {
     state = 'flipped';
     stateT = 0;
     idleT = 0;
@@ -770,8 +1037,19 @@
     groundT = 0;
     landed = false;
     pinnedT = 0;
+    heldUntil = 0;
     updateScore();
+    wakeCats();
+    bossFlee();
+  }
 
+  function flip(strength, side, sideways) {
+    if (state !== 'ready') return;
+    startRound();
+    launch(strength, side, sideways);
+  }
+
+  function launch(strength, side, sideways) {
     // strength runs from about 0.3 (a lazy drag) to 2.6 (a hard flick). Lift
     // grows linearly with it, spin and scatter a little slower, so gentle
     // swipes tip the desk over and hard ones send it cartwheeling.
@@ -792,6 +1070,32 @@
     }
   }
 
+
+  // A slow drag grabs the underside of the desktop and lifts it with the
+  // finger, so things slide off. A mouse joint pulls that point toward the
+  // finger while the far legs stay on the floor.
+  let grab = null, grabOffset = null, heldUntil = 0;
+
+  function startTilt(px, py) {
+    startRound();
+    const lx = clamp(px / ppm - desk.getPosition().x, -DESK_W / 2 + 0.05, DESK_W / 2 - 0.05);
+    const anchor = desk.getWorldPoint(V(lx, -DESK_H + DESK_TOP_T));
+    grabOffset = V(anchor.x - px / ppm, anchor.y - py / ppm);
+    grab = world.createJoint(pl.MouseJoint({ maxForce: desk.getMass() * 140, frequencyHz: 4, dampingRatio: 0.8 }, ground, desk, anchor));
+    for (const b of bodies) b.setAwake(true);
+  }
+
+  function moveTilt(px, py) {
+    if (grab) grab.setTarget(V(px / ppm + grabOffset.x, py / ppm + grabOffset.y));
+  }
+
+  function releaseTilt() {
+    if (!grab) return;
+    world.destroyJoint(grab);
+    grab = null;
+    heldUntil = stateT;
+  }
+
   // ---------- sound ----------
   // Everything is synthesized with Web Audio, so there are no files to load.
 
@@ -804,6 +1108,9 @@
     // tap, click or key press until the audio context is running.
     function unlock() {
       if (ac && ac.state === 'running') return;
+      // iOS can leave a context 'interrupted' for good after the phone
+      // sleeps; start over with a fresh one.
+      if (ac && ac.state !== 'suspended') reset();
       if (!ac) {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
@@ -877,6 +1184,16 @@
       o.stop(t + dur + 0.05);
     }
 
+    function reset() {
+      try { ac.close(); } catch (e) { /* already closed */ }
+      ac = null;
+    }
+
+    // Coming back from sleep or another tab: rebuild on the next tap.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && ac) reset();
+    });
+
     return {
       unlock,
       get muted() { return muted; },
@@ -911,6 +1228,17 @@
         burst('bandpass', 1800, 1.5, 0.5, 0.18);
         for (let i = 0; i < 4; i++) tone('triangle', rand(900, 2200), 0.08, rand(0.05, 0.12), rand(0, 0.15));
       },
+      squeak(v) {
+        if (!ready()) return;
+        tone('square', 1500, 0.06 * v + 0.02, 0.09, 0, 2300);
+        tone('square', 2300, 0.05 * v + 0.02, 0.12, 0.08, 1400);
+      },
+      meow() {
+        if (!ready()) return;
+        tone('sawtooth', 700, 0.05, 0.12, 0, 1100);
+        tone('sawtooth', 1100, 0.05, 0.25, 0.1, 550);
+        tone('sine', 1400, 0.05, 0.3, 0.05, 900);
+      },
       ding(big) {
         if (!ready()) return;
         const f = big ? 1320 : 880;
@@ -944,8 +1272,25 @@
     for (const b of [contact.getFixtureA().getBody(), contact.getFixtureB().getBody()]) {
       if (!b.isDynamic()) continue;
       const dv = total / b.getMass();
-      if (dv > (b.thud || 0)) b.thud = dv;
       if (b.breakable && stateT >= GRACE && dv > (b.hit || 0)) b.hit = dv;
+    }
+  }
+
+  // Impact sounds use how fast two things were closing when they first
+  // touched. Resting and jittering contacts close at almost nothing, so they
+  // stay quiet.
+  function onBeginContact(contact) {
+    if (state !== 'flipped') return;
+    const a = contact.getFixtureA().getBody();
+    const b = contact.getFixtureB().getBody();
+    const wm = contact.getWorldManifold(null);
+    if (!wm || !wm.points.length) return;
+    const p = wm.points[0];
+    const va = a.getLinearVelocityFromWorldPoint(p);
+    const vb = b.getLinearVelocityFromWorldPoint(p);
+    const closing = Math.abs((vb.x - va.x) * wm.normal.x + (vb.y - va.y) * wm.normal.y);
+    for (const body of [a, b]) {
+      if (body.isDynamic() && closing > (body.thud || 0)) body.thud = closing;
     }
   }
 
@@ -956,10 +1301,11 @@
       const t = b.thud;
       if (!t) continue;
       b.thud = 0;
-      if (t < 1.5 || thuds >= 3 || clock - (b.lastThud || 0) < 0.08) continue;
+      if (t < 1.8 || thuds >= 3 || clock - (b.lastThud || 0) < 0.15) continue;
       b.lastThud = clock;
       thuds++;
-      sfx.thud(Math.min(1, t / 9), b === desk ? 1 : clamp(b.getMass() / 0.4, 0.15, 0.8));
+      if (b.kind === 'duck') sfx.squeak(Math.min(1, t / 6));
+      else sfx.thud(Math.min(1, t / 8), b === desk ? 1 : clamp(b.getMass() / 0.4, 0.15, 0.8));
     }
     for (const b of bodies.slice()) {
       const dv = b.hit;
@@ -1122,7 +1468,7 @@
   // Hang time adds up every moment the desk is fully off the floor. It is
   // scored once the desk has been back on the floor for a moment.
   function trackHang(dt) {
-    if (state !== 'flipped' || landed) return;
+    if (state !== 'flipped' || landed || grab) return;
     if (!deskOnFloor()) {
       // Resting on top of other stuff doesn't count as hanging.
       if (desk.getLinearVelocity().length() > 0.5) hang += dt;
@@ -1218,6 +1564,8 @@
       stepExtras(STEP);
       acc -= STEP;
     }
+    updateCats(dt);
+    updateBoss(dt);
     for (const p of popups) p.t += dt;
     popups = popups.filter((p) => p.t < 1.4);
     if (state === 'flipped' && !landed) hangEl.textContent = `hang time ${hang.toFixed(2)}s`;
@@ -1227,10 +1575,12 @@
     if (state === 'ready') {
       idleT += dt;
     } else if (state === 'flipped') {
-      if (stateT > RESET_AFTER) {
+      if (grab) heldUntil = stateT;
+      const since = stateT - heldUntil;
+      if (since > RESET_AFTER) {
         let moving = false;
         for (const b of bodies) if (b.getLinearVelocity().length() > 1.2) { moving = true; break; }
-        if (!moving || stateT > RESET_MAX) { state = 'fadeout'; stateT = 0; finishRound(); }
+        if (!moving || since > RESET_MAX) { state = 'fadeout'; stateT = 0; finishRound(); }
       }
     } else if (state === 'fadeout') {
       fade = Math.min(1, stateT / FADE);
@@ -1312,6 +1662,7 @@
     ctx.lineJoin = 'round';
 
     drawRoom();
+    drawBoss();
 
     for (const b of bodies) {
       const p = b.getPosition();
@@ -1322,6 +1673,8 @@
       if (b.cracks && b.cracks.length) drawCracks(b);
       ctx.restore();
     }
+    for (const c of cats) drawCat(c);
+    drawBossBubble();
 
     ctx.font = 'bold 0.075px ui-rounded, system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -1376,6 +1729,7 @@
     const [px, py, pt] = swipe.pts[0];
     const ms = Math.max(25, now - pt);
     const vy = (py - e.clientY) / ms;
+    swipe.vyNow = vy;
     if (vy > swipe.peak) {
       swipe.peak = vy;
       swipe.vx = (e.clientX - px) / ms;
@@ -1398,12 +1752,36 @@
     sfx.unlock();
     if (state !== 'ready') return;
     if (e.clientY < deskTopPx() - 30) return;  // swipes start at the desk, not above it
-    swipe = { x0: e.clientX, y0: e.clientY, peak: 0, vx: 0, pts: [[e.clientX, e.clientY, performance.now()]] };
+    swipe = { x0: e.clientX, y0: e.clientY, t0: performance.now(), peak: 0, vyNow: 0, vx: 0, pts: [[e.clientX, e.clientY, performance.now()]] };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
   });
-  canvas.addEventListener('pointermove', (e) => tryFlip(e, 110));
-  canvas.addEventListener('pointerup', (e) => { tryFlip(e, 25); swipe = null; });
-  canvas.addEventListener('pointercancel', () => { swipe = null; });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!swipe) return;
+    if (grab) {
+      trackSwipe(e);
+      moveTilt(e.clientX, e.clientY);
+      // A flick while holding the desk throws it.
+      if (swipe.vyNow > 2.5) {
+        releaseTilt();
+        launch(clamp(0.2 + swipe.vyNow * 0.45, 0.3, 2.6), Math.sign(grabOffset.x + e.clientX / ppm - cx) || 1, 0);
+        swipe = null;
+      }
+      return;
+    }
+    tryFlip(e, 110);
+    if (!swipe) return;
+    // Slow and steady for a moment means tilt rather than flip.
+    const held = performance.now() - swipe.t0;
+    if (held > 180 && swipe.y0 - e.clientY > 12 && swipe.peak < 0.8 && state === 'ready') {
+      startTilt(e.clientX, e.clientY);
+    }
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (grab) releaseTilt();
+    else tryFlip(e, 25);
+    swipe = null;
+  });
+  canvas.addEventListener('pointercancel', () => { releaseTilt(); swipe = null; });
   window.addEventListener('keydown', (e) => {
     sfx.unlock();
     if (e.code === 'Space' || e.code === 'ArrowUp') {
