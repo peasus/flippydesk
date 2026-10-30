@@ -141,9 +141,13 @@
     { top: '#6fa7a0', side: '#558b84', grain: 'rgba(0,0,0,0.08)' },      // teal
   ];
 
+  const GLASS_TOP = { top: 'rgba(190,225,240,0.6)', side: '#c9ccd3', grain: 'rgba(255,255,255,0.5)' };
+
   function buildDesk() {
-    const wood = pick(WOODS);
-    const style = pick(['legs', 'pedestal', 'pedestal', 'double']);
+    const style = pick(['legs', 'pedestal', 'pedestal', 'double', 'trestle', 'standing']);
+    const glassy = style !== 'pedestal' && style !== 'double' && chance(0.25);
+    const wood = glassy ? GLASS_TOP : pick(WOODS);
+    const metal = pick(['#3b3a44', '#c9ccd3', '#2f3340']);
     const top = -DESK_H;
     const half = DESK_W / 2;
     const legH = DESK_H - DESK_TOP_T;
@@ -159,13 +163,38 @@
     } else {
       peds.push(-half + 0.05, half - 0.5);
     }
+    // Trestle: crossed legs at each end joined by a stretcher.
+    const trestles = style === 'trestle' ? [-half + 0.2, half - 0.2] : [];
+    const xLegs = [];
+    for (const x of trestles) {
+      for (const a of [-0.32, 0.32]) xLegs.push({ x, y: -legH / 2, w: 0.06, h: legH * 1.04, a });
+    }
+    // Standing desk: a column and a wide foot at each end.
+    const columns = style === 'standing' ? [-half + 0.28, half - 0.28] : [];
+    for (const p of xLegs) parts.push(p);
+    if (trestles.length) parts.push(R(-half + 0.2, -legH * 0.5, DESK_W - 0.4, 0.04));
+    for (const x of columns) parts.push(R(x - 0.045, -legH, 0.09, legH), R(x - 0.26, -0.045, 0.52, 0.045));
     for (const x of legs) parts.push(R(x, -legH, 0.07, legH));
     for (const x of peds) parts.push(R(x, -legH, 0.45, legH));
+    const legColor = glassy ? metal : wood.side;
     const drawers = peds.map(() => randInt(2, 3));
     const handle = pick(['#d8b25a', '#c9ccd3', INK]);
 
     desk = addBody(cx, floorY, parts, () => {
-      for (const x of legs) rrect(x, -legH - 0.01, 0.07, legH + 0.01, 0.01, wood.side);
+      if (trestles.length) rrect(-half + 0.2, -legH * 0.5, DESK_W - 0.4, 0.04, 0.01, legColor);
+      for (const p of xLegs) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.a);
+        rrect(-p.w / 2, -p.h / 2, p.w, p.h, 0.012, legColor);
+        ctx.restore();
+      }
+      for (const x of columns) {
+        rrect(x - 0.035, -legH - 0.01, 0.07, legH * 0.55, 0.008, metal);
+        rrect(x - 0.045, -legH * 0.5, 0.09, legH * 0.5, 0.008, metal);
+        rrect(x - 0.26, -0.045, 0.52, 0.045, 0.02, metal);
+      }
+      for (const x of legs) rrect(x, -legH - 0.01, 0.07, legH + 0.01, 0.01, legColor);
       peds.forEach((x, i) => {
         rrect(x, -legH - 0.01, 0.45, legH + 0.01, 0.01, wood.side);
         const n = drawers[i];
@@ -184,6 +213,12 @@
       line(-half + 0.1, top + 0.025, half - 0.6, top + 0.025, wood.grain, 0.008);
       line(-half + 0.5, top + 0.045, half - 0.1, top + 0.045, wood.grain, 0.008);
       ctx.restore();
+      if (columns.length) {
+        // the up/down buttons
+        rrect(half - 0.42, top + DESK_TOP_T, 0.14, 0.04, 0.01, '#2a2733');
+        ellipse(half - 0.385, top + DESK_TOP_T + 0.02, 0.01, 0.01, '#7cc58f', false);
+        ellipse(half - 0.325, top + DESK_TOP_T + 0.02, 0.01, 0.01, '#e66b6b', false);
+      }
     }, { kind: 'desk', density: 3, friction: 0.7, restitution: 0.1, z: -1 });
   }
 
@@ -946,6 +981,7 @@
     ground.createFixture(pl.Box(0.5, 20, V(-0.5, floorY - 19)), { friction: 0 });
     ground.createFixture(pl.Box(0.5, 20, V(Wm + 0.5, floorY - 19)), { friction: 0 });
 
+    pickRoom();
     buildDesk();
     buildItems();
     bodies.sort((a, b) => a.z - b.z);
@@ -1140,10 +1176,22 @@
   function updateBoss(dt) {
     boss.t += dt;
     if (boss.mode === 'away' && state === 'ready' && idleT > BOSS_IDLE) {
-      Object.assign(boss, { mode: 'in', t: 0, line: pick(BOSS_LINES) });
-      sfx.ding(false);
+      Object.assign(boss, { mode: 'in', t: 0, line: pick(BOSS_LINES), said: false, talkT: 0 });
     }
-    if (boss.mode === 'in') boss.slide = Math.min(1, boss.slide + dt * 2);
+    if (boss.mode === 'in') {
+      const was = boss.slide;
+      boss.slide = Math.min(1, boss.slide + dt * 2);
+      if (was < 1 && boss.slide === 1) boss.talkT = 0;
+      if (boss.slide === 1 && (boss.talkT += dt) > 0 && !boss.said) {
+        boss.said = true;
+        sfx.mumble(boss.line.split(' ').length);
+      }
+      if (boss.talkT > 5) {
+        boss.line = pick(BOSS_LINES.filter((l) => l !== boss.line));
+        boss.talkT = 0;
+        boss.said = false;
+      }
+    }
     if (boss.mode === 'flee') {
       boss.slide = Math.max(0, boss.slide - dt * 4);
       if (boss.slide === 0) boss.mode = 'away';
@@ -1437,6 +1485,33 @@
         if (!ready()) return;
         burst('bandpass', 1800, 1.5, 0.5, 0.18);
         for (let i = 0; i < 4; i++) tone('triangle', rand(900, 2200), 0.08, rand(0.05, 0.12), rand(0, 0.15));
+      },
+      // Muted-trombone "wah wah" mumbling, one syllable per word.
+      mumble(words) {
+        if (!ready()) return;
+        let t = ac.currentTime + 0.02;
+        for (let i = 0; i < words; i++) {
+          const dur = rand(0.12, 0.22);
+          const f0 = rand(150, 230) * (i === words - 1 ? 0.8 : 1);
+          const o = ac.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.setValueAtTime(f0, t);
+          o.frequency.linearRampToValueAtTime(f0 * rand(0.85, 1.1), t + dur);
+          const f = ac.createBiquadFilter();
+          f.type = 'lowpass';
+          f.Q.value = 6;
+          f.frequency.setValueAtTime(350, t);
+          f.frequency.linearRampToValueAtTime(1300, t + dur * 0.35);
+          f.frequency.linearRampToValueAtTime(450, t + dur);
+          const g = ac.createGain();
+          env(g, t, 0.22, dur);
+          o.connect(f);
+          f.connect(g);
+          g.connect(master);
+          o.start(t);
+          o.stop(t + dur + 0.05);
+          t += dur + rand(0.03, 0.09);
+        }
       },
       squeak(v) {
         if (!ready()) return;
@@ -1808,48 +1883,233 @@
     hintEl.classList.toggle('show', state === 'ready' && idleT > (flips ? 3 : 0.8));
   }
 
-  function drawRoom() {
-    // wall
-    const g = ctx.createLinearGradient(0, 0, 0, floorY);
-    g.addColorStop(0, '#f6eedf');
-    g.addColorStop(1, '#efe2cb');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, Wm, floorY);
-    ctx.fillStyle = 'rgba(0,0,0,0.025)';
-    for (let x = 0.15; x < Wm; x += 0.3) ctx.fillRect(x, 0, 0.12, floorY);
+  // ---------- rooms ----------
+  // Every so often the desk turns up somewhere new. Each room draws its own
+  // wall, floor and decorations; `ink` is for the corner text on top of it.
 
-    // window
-    const ww = Math.min(1.1, Wm * 0.32);
-    const wh = Math.min(0.85, (floorY - DESK_H - 0.75) * 0.9);
-    if (wh > 0.35) {
-      const wx = cx + DESK_W / 2 - ww - 0.1;
-      const wy = Math.max(0.35, floorY - DESK_H - 0.75 - wh);
-      rrect(wx - 0.04, wy - 0.04, ww + 0.08, wh + 0.08, 0.02, '#ffffff');
-      const sky = ctx.createLinearGradient(0, wy, 0, wy + wh);
-      sky.addColorStop(0, '#8fcff0');
-      sky.addColorStop(1, '#d3eefa');
-      rrect(wx, wy, ww, wh, 0.01, sky);
+  function drawWindow(wx, wy, ww, wh, frame, night) {
+    rrect(wx - 0.04, wy - 0.04, ww + 0.08, wh + 0.08, 0.02, frame);
+    const sky = ctx.createLinearGradient(0, wy, 0, wy + wh);
+    sky.addColorStop(0, night ? '#141a33' : '#8fcff0');
+    sky.addColorStop(1, night ? '#2c3666' : '#d3eefa');
+    rrect(wx, wy, ww, wh, 0.01, sky);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(wx, wy, ww, wh);
+    ctx.clip();
+    if (night) {
+      ellipse(wx + ww * 0.72, wy + wh * 0.28, 0.07, 0.07, '#f7f1d0', false);
+      ellipse(wx + ww * 0.72 + 0.03, wy + wh * 0.28 - 0.02, 0.06, 0.06, '#141a33', false);
+      ctx.fillStyle = '#fff';
+      for (let i = 0; i < 14; i++) {
+        const tw = 0.5 + 0.5 * Math.sin(clock * 2 + i * 1.7);
+        ctx.globalAlpha = 0.4 + 0.6 * tw;
+        ctx.fillRect(wx + ((i * 0.37) % 1) * ww, wy + ((i * 0.61) % 1) * wh * 0.8, 0.012, 0.012);
+      }
+      ctx.globalAlpha = 1;
+    } else {
       const cl = (clock * 0.03) % (ww + 0.4) - 0.2;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(wx, wy, ww, wh);
-      ctx.clip();
       ellipse(wx + cl, wy + wh * 0.35, 0.12, 0.045, '#fff', false);
       ellipse(wx + cl + 0.08, wy + wh * 0.32, 0.08, 0.05, '#fff', false);
-      ctx.restore();
-      line(wx + ww / 2, wy, wx + ww / 2, wy + wh, '#ffffff', 0.03);
-      line(wx, wy + wh / 2, wx + ww, wy + wh / 2, '#ffffff', 0.03);
     }
+    ctx.restore();
+    line(wx + ww / 2, wy, wx + ww / 2, wy + wh, frame, 0.03);
+    line(wx, wy + wh / 2, wx + ww, wy + wh / 2, frame, 0.03);
+  }
 
-    // floor
-    ctx.fillStyle = '#c99a6b';
+  // Where wall decorations go: above the desk, off to the right.
+  function windowSpot() {
+    const ww = Math.min(1.1, Wm * 0.32);
+    const wh = Math.min(0.85, (floorY - DESK_H - 0.75) * 0.9);
+    return { ww, wh, wx: cx + DESK_W / 2 - ww - 0.1, wy: Math.max(0.35, floorY - DESK_H - 0.75 - wh) };
+  }
+
+  function wall(top, bottom) {
+    const g = ctx.createLinearGradient(0, 0, 0, floorY);
+    g.addColorStop(0, top);
+    g.addColorStop(1, bottom);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, Wm, floorY);
+  }
+
+  function floor(color, lines, base) {
+    ctx.fillStyle = color;
     ctx.fillRect(0, floorY, Wm, Hm - floorY);
-    ctx.fillStyle = 'rgba(0,0,0,0.06)';
-    for (let y = floorY + 0.12; y < Hm; y += 0.12) ctx.fillRect(0, y, Wm, 0.008);
-    ctx.fillStyle = '#ffffff';
+    if (lines) {
+      ctx.fillStyle = lines;
+      for (let y = floorY + 0.12; y < Hm; y += 0.12) ctx.fillRect(0, y, Wm, 0.008);
+    }
+    ctx.fillStyle = base;
     ctx.fillRect(0, floorY - 0.06, Wm, 0.06);
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
     ctx.fillRect(0, floorY - 0.008, Wm, 0.008);
+  }
+
+  function poster(x, y, w, h, bg, title, art) {
+    rrect(x - 0.025, y - 0.025, w + 0.05, h + 0.05, 0.01, '#2a2733');
+    rrect(x, y, w, h, 0, bg, false);
+    art(x, y, w, h);
+    label(title, x + w / 2, y + h - 0.05, Math.min(0.07, w * 0.16), '#fff');
+  }
+
+  const ROOMS = {
+    home: {
+      ink: '#2a2733', fade: '#f3e9d8',
+      draw() {
+        wall('#f6eedf', '#efe2cb');
+        ctx.fillStyle = 'rgba(0,0,0,0.025)';
+        for (let x = 0.15; x < Wm; x += 0.3) ctx.fillRect(x, 0, 0.12, floorY);
+        const w = windowSpot();
+        if (w.wh > 0.35) drawWindow(w.wx, w.wy, w.ww, w.wh, '#ffffff', false);
+        floor('#c99a6b', 'rgba(0,0,0,0.06)', '#ffffff');
+      },
+    },
+    office: {
+      ink: '#2a2733', fade: '#dfe3e8',
+      draw() {
+        wall('#e6e9ee', '#d3d8df');
+        // ceiling lights
+        for (let x = 0.3; x < Wm; x += 1.2) {
+          rrect(x, -0.02, 0.6, 0.06, 0.01, '#fdfdf6');
+          ctx.fillStyle = 'rgba(255,255,230,0.12)';
+          ctx.beginPath();
+          ctx.moveTo(x, 0.04);
+          ctx.lineTo(x + 0.6, 0.04);
+          ctx.lineTo(x + 0.8, 0.6);
+          ctx.lineTo(x - 0.2, 0.6);
+          ctx.fill();
+        }
+        const w = windowSpot();
+        if (w.wh > 0.35) {
+          poster(w.wx + w.ww * 0.15, w.wy, w.ww * 0.7, w.wh, '#4fb3bf', room.motto, (x, y, pw, ph) => {
+            poly([[x, y + ph * 0.75], [x + pw * 0.4, y + ph * 0.25], [x + pw * 0.6, y + ph * 0.5], [x + pw * 0.75, y + ph * 0.35], [x + pw, y + ph * 0.75]], '#e9f6f7', false);
+          });
+        }
+        // cubicle partitions behind the desk
+        const ph = 0.55;
+        rrect(-0.1, floorY - ph, Wm + 0.2, ph, 0.02, '#8e98a8');
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        for (let x = 0.4; x < Wm; x += 0.8) ctx.fillRect(x, floorY - ph, 0.03, ph);
+        floor('#7d8796', null, '#5b6170');
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        for (const [fx, fy] of room.specks) ctx.fillRect(fx * Wm, floorY + fy * (Hm - floorY), 0.02, 0.01);
+      },
+    },
+    night: {
+      ink: '#f3e9d8', fade: '#2f3550',
+      draw() {
+        wall('#2b3150', '#3b4263');
+        const w = windowSpot();
+        if (w.wh > 0.35) drawWindow(w.wx, w.wy, w.ww, w.wh, '#4a5277', true);
+        // string lights
+        ctx.beginPath();
+        for (let x = 0; x <= Wm; x += 0.05) ctx.lineTo(x, 0.25 + Math.sin(x * 2.2) * 0.06);
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 0.008;
+        ctx.stroke();
+        for (let x = 0.2; x < Wm; x += 0.3) {
+          const glow = 0.6 + 0.4 * Math.sin(clock * 3 + x * 5);
+          ctx.fillStyle = `rgba(255,214,120,${0.25 * glow})`;
+          ctx.beginPath();
+          ctx.arc(x, 0.27 + Math.sin(x * 2.2) * 0.06, 0.06, 0, Math.PI * 2);
+          ctx.fill();
+          ellipse(x, 0.27 + Math.sin(x * 2.2) * 0.06, 0.018, 0.022, '#ffd678', false);
+        }
+        floor('#5a4636', 'rgba(0,0,0,0.12)', '#454c70');
+      },
+    },
+    loft: {
+      ink: '#f3e9d8', fade: '#9a4f3c',
+      draw() {
+        wall('#a5573f', '#8f4a35');
+        ctx.strokeStyle = 'rgba(240,220,200,0.35)';
+        ctx.lineWidth = 0.008;
+        ctx.beginPath();
+        for (let r = 0, y = 0; y < floorY; r++, y += 0.09) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(Wm, y);
+          for (let x = (r % 2) * 0.13; x < Wm; x += 0.26) {
+            ctx.moveTo(x, y);
+            ctx.lineTo(x, Math.min(floorY, y + 0.09));
+          }
+        }
+        ctx.stroke();
+        const w = windowSpot();
+        if (w.wh > 0.35) {
+          // neon sign
+          const flicker = Math.sin(clock * 37) > 0.97 ? 0.3 : 1;
+          ctx.save();
+          ctx.font = 'italic 800 0.2px ui-rounded, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.shadowColor = '#ff5fa2';
+          ctx.shadowBlur = 25;
+          ctx.globalAlpha = flicker;
+          ctx.fillStyle = '#ffd1e6';
+          ctx.fillText(room.neon, w.wx + w.ww / 2, w.wy + w.wh * 0.6);
+          ctx.restore();
+        }
+        floor('#a9a9a4', 'rgba(0,0,0,0.05)', '#6f6f6b');
+      },
+    },
+    corner: {
+      ink: '#2a2733', fade: '#e9e4da',
+      draw() {
+        wall('#ece7dd', '#ddd5c6');
+        // floor-to-ceiling window with a city in it
+        const x0 = 0.15, y0 = 0.15, w = Wm - 0.3, h = floorY - 0.25;
+        const sky = ctx.createLinearGradient(0, y0, 0, y0 + h);
+        sky.addColorStop(0, '#f7c08a');
+        sky.addColorStop(1, '#f7e2c0');
+        rrect(x0, y0, w, h, 0, sky);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x0, y0, w, h);
+        ctx.clip();
+        for (const b of room.skyline) {
+          const bx = x0 + b.x * w;
+          const by = y0 + h - b.h;
+          ctx.fillStyle = b.c;
+          ctx.fillRect(bx, by, b.w, b.h);
+          ctx.fillStyle = 'rgba(255,240,200,0.5)';
+          for (let wy2 = by + 0.05; wy2 < y0 + h - 0.05; wy2 += 0.08) {
+            for (let wx2 = bx + 0.03; wx2 < bx + b.w - 0.03; wx2 += 0.06) {
+              if ((wx2 * 31 + wy2 * 17) % 1 > 0.45) ctx.fillRect(wx2, wy2, 0.025, 0.035);
+            }
+          }
+        }
+        ctx.restore();
+        for (let x = x0; x <= x0 + w + 0.001; x += w / 3) line(x, y0, x, y0 + h, '#3b3a44', 0.04);
+        line(x0, y0, x0 + w, y0, '#3b3a44', 0.04);
+        floor('#6b4a33', 'rgba(0,0,0,0.12)', '#3b3a44');
+      },
+    },
+  };
+
+  let room = null;
+
+  // Keep the current room most of the time; now and then move somewhere new.
+  function pickRoom() {
+    if (room && !chance(0.35)) return;
+    const names = Object.keys(ROOMS).filter((n) => !room || n !== room.name);
+    const name = room ? pick(names) : 'home';
+    room = {
+      name,
+      theme: ROOMS[name],
+      motto: pick(['SYNERGY', 'HUSTLE', 'ALIGN', 'PIVOT', 'DISRUPT']),
+      neon: pick(['hustle', 'ship it', 'vibes', 'grind']),
+      specks: Array.from({ length: 80 }, () => [Math.random(), Math.random()]),
+      skyline: Array.from({ length: 14 }, (_, i) => ({
+        x: i / 14 + rand(-0.02, 0.02), w: rand(0.2, 0.45), h: rand(0.4, 1.6),
+        c: pick(['#8a7f8e', '#6f6a7d', '#9c8f9a', '#5d5a6b']),
+      })),
+    };
+    document.body.dataset.room = name;
+    document.documentElement.style.setProperty('--ink', room.theme.ink);
+    document.body.style.background = room.theme.fade;
+  }
+
+  function drawRoom() {
+    room.theme.draw();
 
     // coffee stains and spilled dirt
     for (const s of stains) {
@@ -1872,7 +2132,7 @@
     const ox = shake ? rand(-1, 1) * shake * 10 : 0;
     const oy = shake ? rand(-1, 1) * shake * 10 : 0;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#f3e9d8';
+    ctx.fillStyle = room.theme.fade;
     ctx.fillRect(0, 0, W, H);
     ctx.setTransform(dpr * ppm, 0, 0, dpr * ppm, ox * dpr, oy * dpr);
     ctx.lineJoin = 'round';
@@ -1915,8 +2175,10 @@
 
     if (fade > 0) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = `rgba(243,233,216,${fade})`;
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = room.theme.fade;
       ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -2034,6 +2296,7 @@
     get score() { return score; },
     get hang() { return hang; },
     get bodies() { return bodies.length; },
+    set room(name) { room = null; pickRoom(); room.name = name; room.theme = ROOMS[name]; document.body.dataset.room = name; document.documentElement.style.setProperty('--ink', room.theme.ink); },
   };
 
   resize();

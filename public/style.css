@@ -4,7 +4,7 @@ html, body {
   overflow: hidden;
   background: #f3e9d8;
   font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: #2a2733;
+  color: var(--ink, #2a2733);
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
