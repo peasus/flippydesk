@@ -38,6 +38,16 @@
       <p class="empty">Nothing broken yet. Go flip something.</p>
     </div>
   </div>
+  <button id="shop" type="button" aria-label="Weapons store" aria-haspopup="dialog"><span class="boom">🛒</span><span class="n">0</span></button>
+  <div id="arsenal"></div>
+  <div id="store" role="dialog" aria-modal="true" aria-labelledby="store-title" hidden>
+    <div class="card">
+      <button class="close" type="button" aria-label="Close">×</button>
+      <h2 id="store-title">Armory</h2>
+      <p class="bank"></p>
+      <ul></ul>
+    </div>
+  </div>
   <div id="hint"><span class="arrow">↑</span> Swipe up on the desk to flip it</div>
   <script src="vendor/planck.min.js"></script>
   <script src="main.js"></script>
