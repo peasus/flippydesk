@@ -3004,25 +3004,25 @@
 
   function openReport() {
     const num = (n) => (n ? n.toLocaleString() : '\u2013');
-    // Collection: everyday items, then swag in unlock order (locked ones hidden).
-    const rows = [];
+    // Collection: only what has actually turned up on a flipped desk.
     const swagNames = new Set(UNLOCKS.map((u) => u.name));
-    for (const name of ['Desk', ...ITEM_NAMES.filter((n) => !swagNames.has(n))]) {
-      const st = items[name] || { flipped: 0, broken: 0 };
-      rows.push({ cls: st.flipped ? '' : 'zero', cells: [[name], [num(st.flipped)], [num(st.broken), st.broken ? 'now' : '']] });
-    }
-    let unlocked = 0;
-    for (const u of UNLOCKS) {
-      if (flips >= u.at) {
-        unlocked++;
-        const st = items[u.name] || { flipped: 0, broken: 0 };
-        rows.push({ cls: st.flipped ? '' : 'zero', cells: [[u.name], [num(st.flipped)], [num(st.broken), st.broken ? 'now' : '']] });
-      } else {
-        rows.push({ cls: 'locked', cells: [['\uD83D\uDD12 ???'], [`at ${u.at}`], ['flips']] });
-      }
-    }
-    fillTable(reportEl.querySelector('table.items'), rows);
-    reportEl.querySelector('.unlocked').textContent = `${unlocked} of ${UNLOCKS.length} swag items unlocked`;
+    const all = ['Desk', ...ITEM_NAMES.filter((n) => !swagNames.has(n)), ...UNLOCKS.map((u) => u.name)];
+    const seen = all.filter((name) => items[name] && items[name].flipped);
+    fillTable(reportEl.querySelector('table.items'), seen.map((name) => {
+      const st = items[name];
+      return { cells: [[name], [num(st.flipped)], [num(st.broken), st.broken ? 'now' : '']] };
+    }));
+    const bar = reportEl.querySelector('.progress');
+    bar.setAttribute('aria-valuemax', String(all.length));
+    bar.setAttribute('aria-valuenow', String(seen.length));
+    bar.querySelector('.fill').style.width = `${(100 * seen.length) / all.length}%`;
+    const next = nextUnlock();
+    const left = all.length - seen.length;
+    reportEl.querySelector('.unlocked').textContent =
+      `${seen.length} of ${all.length} items found` +
+      (left ? ` \u00b7 ${left} still to find` : ' \u00b7 you found them all!') +
+      (next ? ` \u00b7 next unlock in ${next.at - flips} flip${next.at - flips === 1 ? '' : 's'}` : '');
+    reportEl.querySelector('table.items').hidden = !seen.length;
 
     const kinds = Object.keys(DAMAGE).filter((k) => damage[k]).sort((a, b) => damage[b] - damage[a]);
     fillTable(reportEl.querySelector('table.kinds'), kinds.map((k) => {
