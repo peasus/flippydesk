@@ -403,9 +403,9 @@
           rrect(-0.016, -poleH - 0.01, 0.032, poleH - 0.04, 0.01, '#9aa0aa');
           rrect(-0.04, -0.05, 0.08, 0.05, 0.01, '#5b6170');
           ellipse(0, -poleH, 0.022, 0.022, '#5b6170');
-        }, { kind: 'arm', group: -2, density: 1.5, z: -0.5 });
+        }, { kind: 'arm', group: -2, density: 12, z: -0.5 });
         const clamp = world.createJoint(pl.WeldJoint({ frequencyHz: 0 }, desk, pole, V(px, y)));
-        armJoints.push({ j: clamp, limit: 140, label: 'clamp gave way' });
+        armJoints.push({ j: clamp, limit: 300, label: 'clamp gave way' });
         screens.forEach((sc, i) => {
           const cx0 = 0.06 + fw / 2 + i * (fw + gap);   // screen center, relative to the pole
           const cy0 = 0.1;
@@ -417,10 +417,10 @@
             ellipse(cx0 * 0.5, -0.06, 0.018, 0.018, '#5b6170');
             rrect(cx0 - fw / 2, cy0 - fh / 2, fw, fh, 0.025, '#2f3340');
             screenFace(b, cx0 - sw / 2, cy0 - fh / 2 + 0.03, sw, fh - 0.06, sc.hue, sc.lines);
-          }, { kind: 'computer', group: -2 });
+          }, { kind: 'computer', group: -2, density: 0.5 });
           makeScreen(b, cx0 - sw / 2, cy0 - fh / 2 + 0.03, sw, fh - 0.06);
-          // a springy weld, so the screen wobbles on the arm without sagging
-          const j = world.createJoint(pl.WeldJoint({ frequencyHz: 6, dampingRatio: 0.5 }, pole, b, V(px, py)));
+          // a rigid weld: the arm holds the screen level until it snaps
+          const j = world.createJoint(pl.WeldJoint({ frequencyHz: 0 }, pole, b, V(px, py)));
           armJoints.push({ j, limit: 75, label: 'monitor snapped off' });
         });
         kb.place(x + 0.05 - (span > 0.9 ? 0.12 : 0), y);
@@ -3893,6 +3893,7 @@
     get dog() { return dog && dog.mode; },
     get arms() { return armJoints.map((a) => [a.broken ? 1 : 0, Math.round(a.max || 0)]); },
     get kinds() { return bodies.map((b) => b.kind); },
+    get angles() { return bodies.filter((b) => b.kind === "arm" || b.item === "Monitor arm").map((b) => b.kind + ":" + b.getAngle().toFixed(3)); },
     set room(name) { room = null; pickRoom(); room.name = name; room.theme = ROOMS[name]; document.body.dataset.room = name; document.documentElement.style.setProperty('--ink', room.theme.ink); },
   };
 
