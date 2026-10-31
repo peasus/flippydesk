@@ -134,3 +134,85 @@ html, body {
   10%, 80% { opacity: 1; transform: translate(-50%, 0) scale(1); }
   100% { opacity: 0; transform: translate(-50%, 0) scale(1); }
 }
+
+#damage {
+  position: fixed;
+  right: 10px;
+  top: max(88px, calc(env(safe-area-inset-top) + 74px));
+  height: 34px;
+  min-width: 40px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(42, 39, 51, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#damage .boom { font-size: 16px; }
+#damage.bump { animation: bump 0.35s ease-out; }
+#damage:focus-visible { outline: 2px solid #2a2733; }
+@keyframes bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+#report {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(20, 18, 26, 0.45);
+  touch-action: pan-y;
+}
+#report[hidden] { display: none; }
+#report .card {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: min(80vh, 640px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  padding: 20px 20px 16px;
+  border-radius: 18px;
+  border: 3px solid #2a2733;
+  background: #fffaf0;
+  color: #2a2733;
+  box-shadow: 0 6px 0 #2a2733;
+  user-select: text;
+  -webkit-user-select: text;
+}
+#report h2 { margin: 0 0 4px; font-size: 22px; font-weight: 800; }
+#report .total { margin: 0 0 12px; font-size: 14px; font-weight: 600; opacity: 0.7; }
+#report table { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+#report th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.55; padding: 0 0 6px; }
+#report th:not(:first-child), #report td:not(:first-child) { text-align: right; width: 70px; }
+#report td { padding: 7px 0; border-top: 1px solid rgba(42, 39, 51, 0.12); font-weight: 600; }
+#report td.now { color: #c2410c; font-weight: 800; }
+#report .empty { margin: 8px 0 0; font-weight: 600; opacity: 0.6; }
+#report .close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(42, 39, 51, 0.08);
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}

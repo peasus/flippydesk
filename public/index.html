@@ -17,6 +17,19 @@
   <div id="toast" role="status"></div>
   <div id="score" aria-live="polite"><div class="num">0</div><div class="hang">hang time 0.00s</div></div>
   <button id="mute" type="button" aria-label="Mute sound" aria-pressed="false"></button>
+  <button id="damage" type="button" aria-label="Damage report" aria-haspopup="dialog"><span class="boom">💥</span><span class="n">0</span></button>
+  <div id="report" role="dialog" aria-modal="true" aria-labelledby="report-title" hidden>
+    <div class="card">
+      <button class="close" type="button" aria-label="Close">×</button>
+      <h2 id="report-title">Damage report</h2>
+      <p class="total"></p>
+      <table>
+        <thead><tr><th>What broke</th><th>This desk</th><th>All time</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="empty">Nothing broken yet. Go flip something.</p>
+    </div>
+  </div>
   <div id="hint"><span class="arrow">↑</span> Swipe up on the desk to flip it</div>
   <script src="vendor/planck.min.js"></script>
   <script src="main.js"></script>
