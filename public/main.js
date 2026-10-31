@@ -92,7 +92,7 @@
   // ---------- world state ----------
 
   let W = 0, H = 0, dpr = 1, ppm = 100, Wm = 0, Hm = 0, floorY = 0, cx = 0;
-  let world, desk, bodies, drops, stains, armJoints = [];
+  let world, desk, bodies, drops, stains, splats = [], armJoints = [];
   let state = 'ready';          // ready | flipped | fadeout | fadein
   let stateT = 0, fade = 0, shake = 0, idleT = 0, clock = 0;
   let lastDeskSpeed = 0;
@@ -2241,6 +2241,94 @@
     };
   }
 
+  // A birthday cake with one candle. It is not a lie, and it does not
+  // survive the landing.
+  function cake() {
+    const frost = pick(['#f7c6d9', '#fff4e6', '#6b3f22']);
+    return {
+      w: 0.2,
+      place(x, y) {
+        const b = addBody(x, y, [R(-0.095, -0.015, 0.19, 0.015), R(-0.08, -0.11, 0.16, 0.095)], () => {
+          rrect(-0.095, -0.015, 0.19, 0.015, 0.006, '#e8eaee');
+          rrect(-0.08, -0.11, 0.16, 0.095, 0.02, '#7a4a2a');
+          rrect(-0.08, -0.07, 0.16, 0.012, 0, '#f7c6d9', false);
+          rrect(-0.082, -0.115, 0.164, 0.035, 0.016, frost);
+          for (let k = -3; k <= 3; k++) ellipse(k * 0.022, -0.082, 0.009, 0.012, frost, false);
+          for (let k = -2; k <= 2; k++) ellipse(k * 0.03, -0.12, 0.009, 0.009, '#e04a55', false);
+          rrect(-0.006, -0.17, 0.012, 0.05, 0.003, '#f2f2f2');
+          line(-0.006, -0.155, 0.006, -0.145, '#e04a55', 0.003);
+          const f = 1 + Math.sin(clock * 18) * 0.15;
+          ellipse(0, -0.183, 0.008 * f, 0.014 * f, '#ffb33d', false);
+          ellipse(0, -0.18, 0.004, 0.007, '#fff1a8', false);
+        }, { kind: 'cake', density: 0.9 });
+        b.breakable = 'cake';
+        b.frost = frost;
+        b.shatter = () => {
+          const c = b.getWorldCenter(), v = b.getLinearVelocity();
+          const icing = { color: frost, stain: frost === '#6b3f22' ? 'rgba(107,63,34,0.9)' : frost === '#fff4e6' ? 'rgba(255,244,230,0.95)' : 'rgba(247,198,217,0.95)' };
+          const sponge = { color: '#7a4a2a', stain: 'rgba(122,74,42,0.9)' };
+          for (let i = 0; i < 40; i++) {
+            drops.push(Object.assign({ x: c.x + rand(-0.06, 0.06), y: c.y + rand(-0.05, 0.03), vx: v.x * 0.3 + rand(-4, 4), vy: rand(-5, -0.5), r: rand(0.012, 0.03) }, i % 3 ? icing : sponge));
+          }
+          // a splat on the wall behind, and one where it hit
+          splats.push({ x: c.x, y: c.y, r: rand(0.14, 0.2), color: icing.color, seed: Math.random() * 100 });
+          splats.push({ x: c.x + rand(-0.15, 0.15), y: Math.min(floorY - 0.05, c.y + rand(-0.2, 0.05)), r: rand(0.06, 0.1), color: '#7a4a2a', seed: Math.random() * 100 });
+          spawnShards(b, 0, -0.06, 4, '#7a4a2a');
+          spawnShards(b, 0, -0.1, 3, frost);
+          world.destroyBody(b);
+          bodies.splice(bodies.indexOf(b), 1);
+        };
+      },
+    };
+  }
+
+  // A grey crate with pink hearts. It will never threaten to stab you.
+  function companionBox() {
+    return {
+      w: 0.15,
+      place(x, y) {
+        addBody(x, y, [R(-0.07, -0.14, 0.14, 0.14)], () => {
+          rrect(-0.07, -0.14, 0.14, 0.14, 0.02, '#c9ccd3');
+          for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) rrect(sx * 0.045 - 0.018, -0.07 + sy * 0.045 - 0.018, 0.036, 0.036, 0.008, '#8a94a3', false);
+          ellipse(0, -0.07, 0.042, 0.042, '#e8eaee');
+          ellipse(0, -0.07, 0.03, 0.03, '#f2a2c0', false);
+          // a little heart
+          ctx.fillStyle = '#e0457b';
+          ctx.beginPath();
+          ctx.moveTo(0, -0.054);
+          ctx.bezierCurveTo(-0.03, -0.075, -0.012, -0.095, 0, -0.08);
+          ctx.bezierCurveTo(0.012, -0.095, 0.03, -0.075, 0, -0.054);
+          ctx.fill();
+        }, { kind: 'cube', density: 1.2 });
+      },
+    };
+  }
+
+  // A white sentry pod with a red eye. It says hello when it falls over.
+  function sentryPod() {
+    return {
+      w: 0.12,
+      place(x, y) {
+        const b = addBody(x, y, [{ pts: [[-0.04, 0], [0.04, 0], [0.05, -0.1], [0.03, -0.17], [-0.03, -0.17], [-0.05, -0.1]] }], () => {
+          for (const s of [-1, 1]) line(s * 0.02, -0.03, s * 0.055, 0, '#3b3a44', 0.008);
+          ctx.beginPath();
+          ctx.ellipse(0, -0.095, 0.048, 0.08, 0, 0, Math.PI * 2);
+          finish('#f2f3f5');
+          line(0, -0.17, 0, -0.02, 'rgba(0,0,0,0.15)', 0.004);
+          ellipse(0, -0.11, 0.016, 0.016, '#1d1c22', false);
+          ellipse(0, -0.11, 0.008, 0.008, blink(7, 4) ? '#ff2020' : '#9a1010', false);
+          if (Math.abs(b.getAngle()) < 0.5 && state === 'ready') {
+            ctx.save();
+            ctx.globalAlpha = 0.5;
+            line(0, -0.11, -0.9, -0.12 + Math.sin(clock) * 0.05, '#ff2020', 0.003);
+            ctx.restore();
+          }
+        }, { kind: 'sentry', density: 0.7 });
+        b.breakable = 'sentry';
+      },
+    };
+  }
+
   // ---------- item names ----------
   // Every body an item creates is tagged with the item's name, so the
   // damage report can count what was flipped and what got broken.
@@ -2330,6 +2418,9 @@
   robotHand = named('Robot hand', robotHand);
   reelTape = named('Tape deck', reelTape);
   satDish = named('Satellite dish', satDish);
+  cake = named('Cake', cake);
+  companionBox = named('Companion box', companionBox);
+  sentryPod = named('Sentry pod', sentryPod);
   const ROBOT_ITEM_NAMES = ITEM_NAMES.slice(firstRobotItem);
 
   // Swag unlocks as the flip count grows; each new item is guaranteed a spot
@@ -2406,7 +2497,7 @@
   }
 
   const ROBOT_EXTRAS = [robotToy, oilCan, gear, battery, floppyDisk, vacuumTube, circuitBoard, joystick, mug,
-    teslaCoil, punchCards, nixieClock, oscilloscope, brainJar, robotHand, reelTape, satDish];
+    teslaCoil, punchCards, nixieClock, oscilloscope, brainJar, robotHand, reelTape, satDish, companionBox, sentryPod];
 
   // Old iron, mostly: green-screen terminals and the odd modern machine.
   const ROBOT_COMPUTERS = [
@@ -2425,6 +2516,8 @@
   function buildRobotItems() {
     const extras = [];
     if (chance(0.5)) extras.push(chromeSkull());
+    // there is always a good chance of cake, and in the test chamber, a certainty
+    if (room && room.name === 'chamber' ? true : chance(0.35)) extras.push(cake());
     for (const make of shuffle(ROBOT_EXTRAS.slice()).slice(0, randInt(3, 5))) extras.push(make());
     return shuffle(extras);
   }
@@ -2479,6 +2572,7 @@
     bodies = [];
     drops = [];
     stains = [];
+    splats = [];
 
     shardCount = 0;
     popups = [];
@@ -3657,6 +3751,12 @@
         burst('highpass', 2500, 0.7, 0.5, 0.08);
         tone('sine', 120, 0.8, 0.35, 0, 35);
       },
+      splat() {
+        if (!ready()) return;
+        burst('lowpass', 500, 0.7, 0.9, 0.18);
+        burst('bandpass', 1400, 2, 0.4, 0.08, 0.02);
+        tone('sine', 140, 0.4, 0.15, 0, 50);
+      },
       brrt() {
         if (!ready()) return;
         burst('bandpass', 900, 1.5, 0.3, 0.04);
@@ -3734,7 +3834,7 @@
   const GLASS = 'rgba(214,236,250,0.9)';
   const GRACE = 0.25;        // ignore the hits from the launch itself
   const MAX_SHARDS = 40;
-  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350, lava: 350, glass: 200, fishbowl: 400, cheese: 250 };
+  const POINTS = { cake: 500, crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350, lava: 350, glass: 200, fishbowl: 400, cheese: 250 };
 
   function makeScreen(b, x, y, w, h) {
     b.breakable = 'screen';
@@ -3817,6 +3917,13 @@
       else if (b.breakable === 'lava' && dv > 3) breakApart(b, 'lava', 'lava lamp popped');
       else if (b.breakable === 'zen' && dv > 3 && b.sand) spillSand(b);
       else if (b.breakable === 'glass' && dv > 3) breakApart(b, 'glass', 'glass smashed');
+      else if (b.breakable === 'cake' && dv > 2.2) { sfx.splat(); breakApart(b, 'cake', pick(['cake splattered!', 'the cake was real', 'happy birthday!'])); }
+      else if (b.breakable === 'sentry' && dv > 2 && !b.spoke) {
+        b.spoke = true;
+        const c = b.getWorldCenter();
+        addPoints(150, pick(['\u201cI don\u2019t blame you\u201d', '\u201chello?\u201d', '\u201cno hard feelings\u201d', '\u201cwhy?\u201d']), c.x, c.y);
+        sfx.beep(true);
+      }
       else if (b.breakable === 'fishbowl' && dv > 3.2) breakApart(b, 'fishbowl', 'fishbowl smashed');
       else if (b.breakable === 'cheese' && dv > 3.2) breakApart(b, 'cheese', 'cheese crumbled');
       else if (b.breakable === 'trap' && dv > 1.5 && !b.sprung) {
@@ -3848,7 +3955,7 @@
   function breakApart(b, kind, label) {
     const c = b.getWorldCenter();
     b.shatter();
-    if (kind === 'lamp' || kind === 'snowglobe' || kind === 'acrylic' || kind === 'lava' || kind === 'glass' || kind === 'fishbowl') sfx.shatter(0.7); else sfx.smash();
+    if (kind === 'cake') { /* the splat is its own sound */ } else if (kind === 'lamp' || kind === 'snowglobe' || kind === 'acrylic' || kind === 'lava' || kind === 'glass' || kind === 'fishbowl') sfx.shatter(0.7); else sfx.smash();
     addPoints(POINTS[kind], label, c.x, c.y);
     shake = Math.min(1, shake + 0.2);
   }
@@ -6624,6 +6731,7 @@
     const j = b.juggles || 0;
     logDamage('blasted');
     addPoints((300 + j * 250) * mult, j ? `juggled x${j}, kaboom!` : mult > 1 ? `airborne x${mult}!` : 'airborne!', c.x, c.y);
+    if (b.breakable === 'cake') { sfx.splat(); b.shatter(); return; }
     spawnShards(b, b.getLocalCenter().x, b.getLocalCenter().y, 5, pick([CHROME, '#3b3a44', '#e66b6b', '#f2c14e']));
     for (let i = 0; i < 4; i++) smoke.push({ x: c.x + rand(-0.05, 0.05), y: c.y, r: rand(0.04, 0.07), t: -rand(0, 0.2), life: rand(1, 1.8), vx: rand(-0.2, 0.2), shade: rand(60, 100) });
     booms.push({ x: c.x, y: c.y, vx: 0, vy: 0, r: 0.12, t: 0, life: 0.3 });
@@ -6879,6 +6987,17 @@
     }
   }
 
+  const CHAMBER_LINES = [
+    'Please flip the desk. For science.',
+    'You are doing very well. Statistically.',
+    'There will be cake.',
+    'The cake is not a lie. It is a desk accessory.',
+    'This next test involves gravity. And furniture.',
+    'The Companion Box cannot speak. Ignore it if it does.',
+    'Remarkable. Nobody has ever flipped it that badly.',
+    'Testing will continue until morale improves.',
+  ];
+
   const ROBOT_ROOMS = {
     warroom: {
       ink: '#cfe8ff', fade: '#0b1020', robot: true,
@@ -6962,6 +7081,101 @@
         ctx.restore();
         aiEye(Wm - Math.max(0.3, (Wm - DESK_W) / 4), floorY - DESK_H - 0.45, 0.9);
         steelFloor('#262022', '#4a3a3d');
+      },
+    },
+    // A white-tiled test chamber, watched by a hanging AI core with one yellow
+    // eye that narrates. Two portals hum on the walls.
+    chamber: {
+      ink: '#2a2d36', fade: '#e3e6eb', robot: true,
+      draw() {
+        bigFill('#d5d9df', '#f2f3f5');
+        // panel grid
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+        ctx.lineWidth = 0.008;
+        for (let x = -Wm * 2; x < Wm * 3; x += 0.4) { ctx.beginPath(); ctx.moveTo(x, -Hm * 4); ctx.lineTo(x, floorY); ctx.stroke(); }
+        for (let y = floorY; y > -Hm * 4; y -= 0.4) { ctx.beginPath(); ctx.moveTo(-Wm * 2, y); ctx.lineTo(Wm * 3, y); ctx.stroke(); }
+        // the portals
+        const portalAt = (x, y, c1, c2) => {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.fillStyle = c2;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 0.2, 0.36, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.lineWidth = 0.035;
+          ctx.strokeStyle = c1;
+          ctx.shadowColor = c1;
+          ctx.shadowBlur = 20;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          ctx.lineWidth = 0.008;
+          for (let i = 0; i < 4; i++) {
+            ctx.globalAlpha = 0.5;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 0.18 - i * 0.04, 0.33 - i * 0.07, clock * (i % 2 ? 1 : -1) * 0.8, 0.3, 4);
+            ctx.stroke();
+          }
+          ctx.restore();
+        };
+        portalAt(Math.max(0.3, cx - DESK_W / 2 - 0.45), floorY - 0.42, '#3aa0ff', '#0d2a4a');
+        portalAt(Math.min(Wm - 0.3, cx + DESK_W / 2 + 0.45), floorY - 0.42, '#ff8a1a', '#4a250d');
+        // the chamber sign, where there's room for it
+        const w = windowSpot();
+        if (Wm > 3) {
+          const sx = Math.min(Wm - 0.55, cx + DESK_W / 2 - 0.5), sy = Math.max(0.12, w.wy);
+          rrect(sx, sy, 0.5, 0.62, 0.02, '#f7f7f7');
+          ctx.save();
+          ctx.translate(sx, sy);
+          ctx.scale(0.001, 0.001);   // tiny canvas fonts render badly; draw big and scale down
+          ctx.fillStyle = '#2a2d36';
+          ctx.font = '900 170px ui-rounded, system-ui, sans-serif';
+          ctx.fillText('19', 50, 200);
+          ctx.font = 'bold 34px ui-monospace, Menlo, monospace';
+          ctx.fillText('19/19', 340, 80);
+          ctx.fillRect(50, 250, 400, 8);
+          ctx.font = 'bold 36px ui-monospace, Menlo, monospace';
+          ctx.fillText('DESK ENRICHMENT', 50, 470);
+          ctx.fillText('CENTER', 50, 515);
+          ctx.restore();
+          for (let i = 0; i < 5; i++) rrect(sx + 0.05 + i * 0.085, sy + 0.3, 0.065, 0.065, 0.01, i === 2 ? '#e0a020' : '#2a2d36', false);
+        }
+        // the AI core hanging from the ceiling
+        const ax = Math.max(0.5, cx - DESK_W / 2 + 0.2), ay = Math.max(0.55, floorY - DESK_H - 0.9);
+        const sway = Math.sin(clock * 0.6) * 0.06;
+        line(ax, -Hm * 4, ax, ay - 0.35, '#5b6170', 0.05);
+        ctx.save();
+        ctx.translate(ax, ay);
+        ctx.rotate(sway);
+        rrect(-0.06, -0.38, 0.12, 0.18, 0.03, '#3b3f4a');
+        ctx.beginPath();
+        ctx.moveTo(-0.14, -0.22);
+        ctx.quadraticCurveTo(-0.24, 0.05, -0.12, 0.12);
+        ctx.lineTo(0.16, 0.12);
+        ctx.quadraticCurveTo(0.2, -0.05, 0.12, -0.22);
+        ctx.closePath();
+        finish('#e8eaee');
+        rrect(-0.2, -0.02, 0.4, 0.16, 0.08, '#c9ccd3');
+        ellipse(0.12, 0.06, 0.07, 0.07, '#2a2d36');
+        const g = 0.7 + 0.3 * Math.sin(clock * 2);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ellipse(0.12, 0.06, 0.09, 0.09, `rgba(255,200,40,${0.25 * g})`, false);
+        ctx.restore();
+        ellipse(0.12, 0.06, 0.035, 0.035, '#ffcc33', false);
+        ellipse(0.12, 0.06, 0.014, 0.014, '#fff7d0', false);
+        ctx.restore();
+        // the narration
+        const line_ = CHAMBER_LINES[Math.floor(clock / 6) % CHAMBER_LINES.length];
+        const k = (clock % 6) / 6;
+        ctx.save();
+        ctx.globalAlpha = k < 0.08 ? k / 0.08 : k > 0.85 ? (1 - k) / 0.15 : 1;
+        ctx.font = `italic ${Math.min(0.065, Wm * 0.03)}px ui-rounded, system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#c08a00';
+        ctx.fillText(line_, cx, Math.max(0.12, ay - 0.5));
+        ctx.restore();
+        steelFloor('#c9ced6', '#8a94a3');
       },
     },
     // A white spaceship corridor. The eye is very calm about all this.
@@ -7135,6 +7349,25 @@
     document.body.style.background = room.theme.fade;
   }
 
+  // Cake on the walls.
+  function drawSplats() {
+    for (const s of splats) {
+      ctx.fillStyle = s.color;
+      ctx.beginPath();
+      for (let i = 0; i <= 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        const r = s.r * (0.65 + 0.35 * Math.abs(Math.sin(a * 3 + s.seed)));
+        if (i === 0) ctx.moveTo(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r); else ctx.lineTo(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r);
+      }
+      ctx.fill();
+      for (let i = 0; i < 5; i++) {
+        const a = s.seed + i * 1.3;
+        ellipse(s.x + Math.cos(a) * s.r * 1.4, s.y + Math.sin(a) * s.r * 1.4, s.r * 0.12, s.r * 0.12, s.color, false);
+        ctx.fillRect(s.x + Math.cos(a) * s.r * 0.6 - 0.004, s.y, 0.008, s.r * (0.6 + (i % 3) * 0.3));
+      }
+    }
+  }
+
   function drawRoom() {
     room.theme.draw();
     drawHole();
@@ -7168,6 +7401,7 @@
     ctx.lineJoin = 'round';
 
     drawRoom();
+    drawSplats();
     drawBoss();
     drawGust();
     drawPal();
