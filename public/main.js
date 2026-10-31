@@ -3644,6 +3644,11 @@
     'fishbowl smashed': 'Fishbowls smashed',
     'fan busted': 'Desk fans busted',
     'cheese crumbled': 'Cheeses crumbled',
+    'desk cleaved': 'Desks cleaved',
+    'desk skewered': 'Desks skewered',
+    'desk blown up': 'Desks blown up',
+    'desk incinerated': 'Desks incinerated',
+    'torched': 'Things torched',
     'trap sprung': 'Mousetraps sprung',
   };
   const damageBtn = document.getElementById('damage');
@@ -3756,8 +3761,9 @@
   showDamage(false);
 
   // ---------- armory ----------
-  // Points from normal flips go into a bank. The bank buys weapons, and each
-  // weapon you own can be used on any desk. Weapon rounds score nothing.
+  // Points go into a bank. The bank buys weapons, and each weapon you own can
+  // be used on any desk. Weapons score for what they destroy, but get no hang
+  // time. Mouse World keeps its own bank and its own mouse-sized arsenal.
 
   const WEAPONS = [
     { id: 'sword', name: 'Broadsword', icon: '\u{1F5E1}️', price: 10000, blurb: 'One mighty overhead swing. The desk comes apart in two.' },
@@ -3765,11 +3771,24 @@
     { id: 'laser', name: 'Laser cannon', icon: '⚡', price: 75000, blurb: 'Slices the desk clean through and sets both halves ablaze.' },
     { id: 'nuke', name: 'Tactical nuke', icon: '☢️', price: 150000, blurb: 'Slid under the desk. It beeps. Then it doesn’t.' },
   ];
+  const MOUSE_WEAPONS = [
+    { id: 'sword', name: 'Sewing needle', icon: '\u{1FAA1}', price: 10000, blurb: 'En garde! One mighty slash and the desk comes apart in two.' },
+    { id: 'grenade', name: 'Firecracker', icon: '\u{1F9E8}', price: 30000, blurb: 'Light the fuse, toss it on the desk, cover your ears.' },
+    { id: 'laser', name: 'Magnifying glass', icon: '\u{1F50D}', price: 75000, blurb: 'Focus the sun into one very hot beam. The desk goes up in flames.' },
+    { id: 'nuke', name: 'The Big Cheese', icon: '\u{1F9C0}', price: 150000, blurb: 'A wheel of dangerously aged cheese. It beeps. Then it doesn\u2019t.' },
+  ];
+  const arms = () => (mouseWorld ? MOUSE_WEAPONS : WEAPONS);
   const TRY_ALL = /[?&]armory\b/.test(location.search);
   let cash = 0;
   let owned = [];
-  try { cash = parseInt(localStorage.getItem('flippydesk.cash'), 10) || 0; } catch (e) { cash = 0; }
-  try { owned = JSON.parse(localStorage.getItem('flippydesk.owned')) || []; } catch (e) { owned = []; }
+  const bankKey = (k) => (mouseWorld ? `flippydesk.mouse.${k}` : `flippydesk.${k}`);
+
+  // Each world has its own bank; load the one for the world we're in.
+  function loadBank() {
+    try { cash = parseInt(localStorage.getItem(bankKey('cash')), 10) || 0; } catch (e) { cash = 0; }
+    try { owned = JSON.parse(localStorage.getItem(bankKey('owned'))) || []; } catch (e) { owned = []; }
+  }
+  loadBank();
   let weaponRound = false;
   let weapon = null;      // the weapon animation in progress
   let flames = [];
@@ -3784,8 +3803,8 @@
 
   function saveBank() {
     try {
-      localStorage.setItem('flippydesk.cash', String(cash));
-      localStorage.setItem('flippydesk.owned', JSON.stringify(owned));
+      localStorage.setItem(bankKey('cash'), String(cash));
+      localStorage.setItem(bankKey('owned'), JSON.stringify(owned));
     } catch (e) { /* private mode */ }
   }
 
@@ -3798,13 +3817,14 @@
 
   function showBank(bump) {
     shopBtn.querySelector('.n').textContent = short(cash);
+    shopBtn.querySelector('.boom').textContent = mouseWorld ? '\u{1F9C0}' : '\u{1F6D2}';
     if (bump) {
       shopBtn.classList.remove('bump');
       void shopBtn.offsetWidth;
       shopBtn.classList.add('bump');
     }
     arsenalEl.textContent = '';
-    for (const w of WEAPONS) {
+    for (const w of arms()) {
       if (!has(w.id)) continue;
       const b = document.createElement('button');
       b.type = 'button';
@@ -3818,10 +3838,13 @@
   }
 
   function openStore() {
-    storeEl.querySelector('.bank').textContent = `You have ${cash.toLocaleString()} points to spend. Every point you score on a normal flip goes in the bank.`;
+    storeEl.querySelector('h2').textContent = mouseWorld ? 'Mouse Armory' : 'Armory';
+    storeEl.querySelector('.bank').textContent = mouseWorld
+      ? `You have ${cash.toLocaleString()} Mouse World points to spend. Points scored on this side of the wall go in this bank.`
+      : `You have ${cash.toLocaleString()} points to spend. Every point you score goes in the bank.`;
     const list = storeEl.querySelector('ul');
     list.textContent = '';
-    for (const w of WEAPONS) {
+    for (const w of arms()) {
       const li = document.createElement('li');
       const icon = document.createElement('span');
       icon.className = 'icon';
@@ -3847,7 +3870,7 @@
           showBank(false);
           sfx.unlock();
           sfx.ding(true);
-          toastEl.textContent = WEAPONS.every((x) => has(x.id)) ? 'You hear scratching under the desk\u2026' : `${w.name} acquired`;
+          toastEl.textContent = !mouseWorld && WEAPONS.every((x) => has(x.id)) ? 'You hear scratching under the desk\u2026' : `${w.name} acquired`;
           toastEl.classList.remove('show');
           void toastEl.offsetWidth;
           toastEl.classList.add('show');
@@ -4128,7 +4151,7 @@
     releaseTilt();
     startRound();
     weaponRound = true;
-    updateScore();
+    landed = true;   // weapons don't earn hang time
     const top = desk.getWorldPoint(V(0, -DESK_H));
     weapon = { id, t: 0, x: top.x, y: top.y, fired: false, done: false };
     if (id === 'sword') {
@@ -4153,6 +4176,7 @@
       weapon.nextBeep = 0.6;
       weapon.gap = 0.7;
     }
+    updateScore();
     showBank(false);
   }
 
@@ -4182,6 +4206,7 @@
         sparkBurst(w.x, w.y, 40);
         sfx.clang();
         shake = 1;
+        addPoints(500, mouseWorld ? 'desk skewered' : 'desk cleaved', w.x, w.y - 0.3);
       }
       if (w.t > 1.2) w.done = true;
     } else if (w.id === 'grenade') {
@@ -4212,6 +4237,7 @@
         w.flash = 1;
         shake = 1.6;
         sfx.boom(1);
+        addPoints(1000, 'desk blown up', gx, gy - 0.4);
       }
       if (w.flash) w.flash = Math.max(0, w.flash - dt * 5);
       if (w.t > 3) w.done = true;
@@ -4234,6 +4260,7 @@
           if (Math.hypot(c.x - p.x, c.y - p.y) < 0.18) {
             b.lasered = true;
             setAblaze(b, rand(3, 5));
+            if (b.item) addPoints(100, 'torched', c.x, c.y);
             if (b.breakable && b.breakable !== 'desk') b.hit = 9;
           }
         }
@@ -4252,6 +4279,7 @@
           setAblaze(p, 8);
         }
         sfx.zap();
+        addPoints(800, 'desk incinerated', w.x, w.y - 0.3);
       }
       if (w.t > 3) w.done = true;
     } else if (w.id === 'nuke') {
@@ -4265,6 +4293,8 @@
       if (!w.fired && w.t >= BOOM) {
         w.fired = true;
         sfx.nuke();
+        const n = bodies.length;
+        addPoints(2500 + n * 100, `${n} things vaporized`, cx, floorY - 1.2);
       }
       if (w.t >= 12.5 && state === 'flipped') {
         w.done = true;
@@ -4303,6 +4333,11 @@
       ctx.stroke();
     }
     ctx.rotate(a);
+    if (mouseWorld) {
+      drawNeedle(L);
+      ctx.restore();
+      return;
+    }
     // grip, pommel, crossguard
     rrect(-0.36, -0.035, 0.34, 0.07, 0.02, '#5b3a2a');
     for (let i = 0; i < 5; i++) line(-0.33 + i * 0.065, -0.035, -0.3 + i * 0.065, 0.035, '#3b2416', 0.01);
@@ -4320,7 +4355,30 @@
     ctx.restore();
   }
 
+  // A giant sewing needle trailing red thread, held at the eye end.
+  function drawNeedle(L) {
+    ctx.beginPath();
+    ctx.moveTo(0.06, 0);
+    ctx.bezierCurveTo(-0.2, 0.05, -0.25, 0.3, -0.5, 0.2 + Math.sin(clock * 6) * 0.04);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 0.034;
+    ctx.stroke();
+    ctx.strokeStyle = '#e04a55';
+    ctx.lineWidth = 0.018;
+    ctx.stroke();
+    const g = ctx.createLinearGradient(0, -0.035, 0, 0.035);
+    g.addColorStop(0, '#f4f6fa');
+    g.addColorStop(0.5, '#c4ccd8');
+    g.addColorStop(1, '#8a94a3');
+    poly([[-0.03, -0.035], [L - 0.35, -0.028], [L, 0], [L - 0.35, 0.028], [-0.03, 0.035]], g);
+    ellipse(-0.03, 0, 0.035, 0.035, '#c4ccd8');
+    ellipse(0.06, 0, 0.05, 0.012, '#4a4f5c', false);
+    line(0.14, -0.015, L - 0.4, -0.012, 'rgba(255,255,255,0.85)', 0.008);
+  }
+
   function drawGrenade(x, y, spin, blink) {
+    if (mouseWorld) return drawFirecracker(x, y, spin, blink);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(spin);
@@ -4329,6 +4387,31 @@
     rrect(-0.02, -0.095, 0.04, 0.03, 0.006, '#9aa0aa');
     poly([[0.015, -0.09], [0.06, -0.075], [0.055, -0.02], [0.04, -0.02], [0.045, -0.07]], '#9aa0aa');
     if (blink) ellipse(0, 0.02, 0.012, 0.012, '#ff3b3b', false);
+    ctx.restore();
+  }
+
+  // A red firecracker with a fizzing fuse.
+  function drawFirecracker(x, y, spin, lit) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(spin);
+    rrect(-0.03, -0.085, 0.06, 0.17, 0.012, '#d94a4a');
+    rrect(-0.03, -0.085, 0.06, 0.02, 0.006, '#e0b84a');
+    rrect(-0.03, 0.065, 0.06, 0.02, 0.006, '#e0b84a');
+    label('\u7206', 0, 0.012, 0.04, '#ffd84d');
+    ctx.beginPath();
+    ctx.moveTo(0, -0.085);
+    ctx.quadraticCurveTo(0.02, -0.12, 0.005, -0.15);
+    ctx.strokeStyle = '#5b3a2a';
+    ctx.lineWidth = 0.008;
+    ctx.stroke();
+    if (lit || weapon) {
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 6; i++) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * 0.04;
+        ellipse(0.005 + Math.cos(a) * r, -0.15 + Math.sin(a) * r, 0.006, 0.006, i % 2 ? '#fff1a8' : '#ffb33d', false);
+      }
+    }
     ctx.restore();
   }
 
@@ -4347,6 +4430,19 @@
     }
     ctx.save();
     ctx.translate(bx, by);
+    if (mouseWorld) {
+      // a magnifying glass bending sunlight into a hot spot
+      ctx.rotate(ang);
+      rrect(-0.32, -0.04, 0.32, 0.08, 0.04, '#8a5a3b');
+      rrect(-0.02, -0.03, 0.08, 0.06, 0.01, '#c9ccd3');
+      ellipse(0.28, 0, 0.22, 0.22, '#c9a64a');
+      ellipse(0.28, 0, 0.19, 0.19, 'rgba(200,235,255,0.55)', false);
+      ellipse(0.22, -0.07, 0.05, 0.03, 'rgba(255,255,255,0.7)', false);
+      const charge = w.t < 0.85 ? w.t / 0.85 : w.hitP ? 1 : 0.3;
+      ctx.globalCompositeOperation = 'lighter';
+      ellipse(0.5, 0, 0.03 + charge * 0.05, 0.03 + charge * 0.05, `rgba(255,230,120,${0.4 + charge * 0.5})`, false);
+      ctx.restore();
+    } else {
     // mount
     rrect(-0.16 * w.side - 0.12, -0.12, 0.24, 0.24, 0.05, '#3b3a44');
     ctx.rotate(ang);
@@ -4367,13 +4463,17 @@
       }
     }
     ctx.restore();
+    }
     if (w.hitP) {
       const mx = bx + Math.cos(ang) * 0.5, my = by + Math.sin(ang) * 0.5;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
       const wob = 1 + Math.random() * 0.3;
-      for (const [wd, col] of [[0.14 * wob, 'rgba(255,40,80,0.25)'], [0.07 * wob, 'rgba(255,60,90,0.6)'], [0.025, 'rgba(255,245,245,1)']]) {
+      const beam = mouseWorld
+        ? [[0.16 * wob, 'rgba(255,220,90,0.22)'], [0.07 * wob, 'rgba(255,200,80,0.5)'], [0.025, 'rgba(255,252,230,1)']]
+        : [[0.14 * wob, 'rgba(255,40,80,0.25)'], [0.07 * wob, 'rgba(255,60,90,0.6)'], [0.025, 'rgba(255,245,245,1)']];
+      for (const [wd, col] of beam) {
         ctx.strokeStyle = col;
         ctx.lineWidth = wd;
         ctx.beginPath();
@@ -4393,12 +4493,21 @@
     const y = floorY - (1 - drop * drop) * 2.5;
     ctx.save();
     ctx.translate(w.bx, y);
+    if (mouseWorld) {
+      // a whole wheel of cheese, wired up
+      rrect(-0.28, -0.2, 0.52, 0.2, 0.05, CHEESE_RIND);
+      ellipse(-0.02, -0.2, 0.26, 0.05, CHEESE);
+      cheeseHoles(-0.26, -0.17, 0.48, 0.15, 5, 1.4);
+      line(0.2, -0.2, 0.24, -0.3, '#e66b6b', 0.008);
+      line(0.16, -0.2, 0.2, -0.29, '#6b8fe6', 0.008);
+    } else {
     // fins, body, nose
     poly([[-0.24, 0], [-0.3, -0.08], [-0.2, -0.08]], '#3b3a44');
     rrect(-0.26, -0.2, 0.46, 0.2, 0.1, '#4a5a3a');
     ellipse(0.2, -0.1, 0.07, 0.1, '#4a5a3a');
     rrect(-0.15, -0.2, 0.025, 0.2, 0, '#e0b84a', false);
     rrect(0.08, -0.2, 0.025, 0.2, 0, '#e0b84a', false);
+    }
     // radiation symbol
     ellipse(-0.03, -0.1, 0.06, 0.06, '#f2c94e');
     ctx.fillStyle = '#1d1c22';
@@ -4582,13 +4691,29 @@
         }
       }
     }
+    if (mouseWorld) {
+      // the cloud is Swiss
+      ctx.save();
+      ctx.globalCompositeOperation = 'color';
+      ctx.fillStyle = 'rgba(255,205,40,0.9)';
+      ctx.beginPath();
+      ctx.ellipse(W / 2, capY - R * 0.2, R * 1.45, R * 0.95, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = 'rgba(110,65,15,0.6)';
+      for (const [u, v, r] of [[-0.6, -0.3, 0.14], [0.2, -0.6, 0.1], [0.55, 0.05, 0.12], [-0.15, 0.1, 0.09], [0.85, -0.35, 0.07], [-0.9, 0.05, 0.08]]) {
+        ctx.beginPath();
+        ctx.ellipse(W / 2 + u * R, capY + v * R, r * R, r * R * 0.85, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
     ctx.restore();
     if (t > 3) {
       ctx.globalAlpha = Math.min(1, (t - 3) / 1);
       ctx.fillStyle = '#fff6e0';
       ctx.font = `700 ${Math.round(Math.min(22, W / 22))}px ui-rounded, system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText('The desk has been decommissioned.', W / 2, H * 0.9);
+      ctx.fillText(mouseWorld ? 'Gouda-bye, desk.' : 'The desk has been decommissioned.', W / 2, H * 0.9);
       ctx.textAlign = 'start';
       ctx.globalAlpha = 1;
     }
@@ -4598,8 +4723,6 @@
 
   function addPoints(n, label, x, y) {
     if (DAMAGE[label]) logDamage(label);
-    // Weapon rounds still count the damage, but score nothing.
-    if (weaponRound) return;
     score += n;
     sfx.ding(n >= 500);
     popups.push({ x: clamp(x, 0.7, Wm - 0.7), y: Math.max(y, 1), text: `+${n} ${label}`, t: 0 });
@@ -4636,12 +4759,12 @@
 
   function updateScore() {
     arsenalEl.classList.toggle('busy', state !== 'ready');
-    if (state === 'ready' || state === 'fadein' || weaponRound) {
+    if (state === 'ready' || state === 'fadein') {
       scoreEl.classList.remove('show');
     } else {
       scoreEl.classList.add('show');
       scoreNumEl.textContent = score.toLocaleString();
-      hangEl.textContent = `hang time ${hang.toFixed(2)}s`;
+      hangEl.textContent = weapon ? arms().find((w) => w.id === weapon.id).name : `hang time ${hang.toFixed(2)}s`;
     }
     countEl.textContent = [
       state === 'ready' && score ? `last ${score.toLocaleString()}` : '',
@@ -4654,7 +4777,6 @@
 
   function finishRound() {
     awardHang();
-    if (weaponRound) return;
     bankPoints(score);
     if (score > best) {
       best = score;
@@ -4756,7 +4878,7 @@
       }
     } else if (state === 'fadeout') {
       fade = Math.min(1, stateT / (portal ? 0.8 : FADE));
-      if (fade >= 1 && portal) { mouseWorld = portal.to; saveWorld(); }
+      if (fade >= 1 && portal) { mouseWorld = portal.to; saveWorld(); loadBank(); showBank(false); }
       if (fade >= 1) { buildScene(); state = 'fadein'; stateT = 0; updateScore(); }
     } else if (state === 'fadein') {
       fade = Math.max(0, 1 - stateT / (portal ? 0.8 : FADE));
