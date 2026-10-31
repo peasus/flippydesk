@@ -3019,6 +3019,7 @@
     landed = false;
     pinnedT = 0;
     heldUntil = 0;
+    downT = 0;
     updateScore();
     wakeCats();
     bossFlee();
@@ -3031,8 +3032,10 @@
   }
 
   function launch(strength, side, sideways) {
-    // In the robot world the desk goes higher, for target practice.
-    if (robotWorld) strength *= 1.35;
+    // In the robot world the desk goes way up, for target practice, while
+    // the things on it scatter about as usual.
+    const scatter = robotWorld ? strength * 1.2 : strength;
+    if (robotWorld) strength = clamp(strength * 1.6, 2, 2.5);
     // strength runs from about 0.3 (a lazy drag) to 2.6 (a hard flick). Lift
     // grows linearly with it, spin and scatter a little slower, so gentle
     // swipes tip the desk over and hard ones send it cartwheeling.
@@ -3046,7 +3049,7 @@
       const v = b.getLinearVelocity();
       b.setLinearVelocity(V(
         v.x + (rand(-2.5, 2.5) + sideways * 2 - side * rand(0, 1.5)) * spin,
-        v.y - rand(2, 6.5) * strength,
+        v.y - rand(2, 6.5) * scatter,
       ));
       b.setAngularVelocity(rand(-9, 9) * spin);
       b.setAwake(true);
@@ -5459,7 +5462,9 @@
     } else if (state === 'flipped') {
       if (grab) heldUntil = stateT;
       const since = stateT - heldUntil;
-      if (since > RESET_AFTER) {
+      if (robotWorld) {
+        if (robotRoundOver(dt)) { state = 'fadeout'; stateT = 0; finishRound(); }
+      } else if (since > RESET_AFTER) {
         let moving = false;
         for (const b of bodies) if (b.getLinearVelocity().length() > 1.2) { moving = true; break; }
         if (!moving || since > RESET_MAX) { state = 'fadeout'; stateT = 0; finishRound(); }
@@ -5995,6 +6000,30 @@
   const gun = { kick: 0, last: -9, aim: null, combo: 0 };
   let tracers = [];
   const ZOOM_OUT = 0.55;
+  let lift = 0;               // meters the camera has risen to follow the pieces up
+  let downT = 0;              // how long everything has been back on the ground
+
+  // Only things in the air can be shot: not on the floor, and not resting
+  // on something else.
+  function airborne(b) {
+    if (!b.isAwake()) return false;   // settled, maybe hanging off a joint
+    if (b.getWorldCenter().y > floorY + 0.5) return false;   // knocked through the floor
+    let touching = false;
+    for (let ce = b.getContactList(); ce; ce = ce.next) {
+      const c = ce.contact;
+      if (!c.isTouching()) continue;
+      if (c.getFixtureA() === floorFix || c.getFixtureB() === floorFix) return false;
+      touching = true;
+    }
+    return !touching || b.getLinearVelocity().length() > 1;
+  }
+
+  // Robot rounds end a couple of seconds after the last piece comes down.
+  function robotRoundOver(dt) {
+    const up = grab || stateT < 1 || bodies.some((b) => b.kind !== 'shard' && airborne(b));
+    downT = up ? 0 : downT + dt;
+    return downT > 2 || stateT > 20;
+  }
 
   function mouseArmoryDone() {
     if (TRY_ALL) return true;
@@ -6040,7 +6069,7 @@
 
   // Screen point to world point, allowing for the zoom.
   function toWorld(px, py) {
-    return { x: cx + (px - W / 2) / (ppm * zoom), y: floorY - (floorY * ppm - py) / (ppm * zoom) };
+    return { x: cx + (px - W / 2) / (ppm * zoom), y: floorY - (floorY * ppm - py) / (ppm * zoom) - lift };
   }
 
   function onGameScreen(px, py) {
@@ -6163,14 +6192,13 @@
     gun.last = clock;
     gun.kick = 1;
     gun.aim = { x: px, y: py };
-    heldUntil = stateT;
     sfx.shotgun();
     setTimeout(() => sfx.pump(), 180);
     const p = toWorld(px, py);
     tracers.push({ x: px, y: py, t: 0, spread: Array.from({ length: 7 }, () => [rand(-14, 14), rand(-14, 14)]) });
     let hits = 0;
     for (const b of bodies.slice()) {
-      if (b === desk || b.kind === 'shard') continue;
+      if (b === desk || b.kind === 'shard' || !airborne(b)) continue;
       const c = b.getWorldCenter();
       let hit = Math.hypot(c.x - p.x, c.y - p.y) < 0.15;
       for (let f = b.getFixtureList(); f && !hit; f = f.getNext()) {
@@ -6182,7 +6210,7 @@
       hits++;
       blastBody(b);
     }
-    if (!hits) {
+    if (!hits && airborne(desk)) {
       for (let f = desk.getFixtureList(); f; f = f.getNext()) {
         if (!f.testPoint(V(p.x, p.y))) continue;
         desk.applyLinearImpulse(V(rand(-0.3, 0.3) * desk.getMass(), -1.5 * desk.getMass()), V(p.x, p.y), true);
@@ -6197,7 +6225,7 @@
 
   function blastBody(b) {
     const c = b.getWorldCenter();
-    const air = c.y < floorY - 0.35;
+    const air = true;   // only airborne things get shot
     gun.combo = air ? gun.combo + 1 : 0;
     const mult = air ? Math.min(5, gun.combo) : 1;
     const pts = (air ? 300 : 150) * mult;
@@ -6214,9 +6242,16 @@
   }
 
   function updateGun(dt) {
-    const target = robotWorld && state === 'flipped' && !grab ? ZOOM_OUT : 1;
-    zoom += (target - zoom) * Math.min(1, dt * 3);
+    let target = 1, rise = 0;
+    if (robotWorld && state === 'flipped' && !grab) {
+      // pull back, and rise to follow the desk up
+      target = ZOOM_OUT;
+      rise = Math.max(0, (floorY - floorY / zoom) - (desk.getWorldCenter().y - 1));
+    }
+    zoom += (target - zoom) * Math.min(1, dt * (target < zoom ? 6 : 1.5));
     if (Math.abs(zoom - target) < 0.001) zoom = target;
+    lift += (rise - lift) * Math.min(1, dt * 8);
+    if (lift < 0.001) lift = 0;
     gun.kick = Math.max(0, gun.kick - dt * 4);
     for (const t of tracers) t.t += dt;
     tracers = tracers.filter((t) => t.t < 0.15);
@@ -6335,21 +6370,21 @@
     g.addColorStop(0, top);
     g.addColorStop(1, bottom);
     ctx.fillStyle = g;
-    ctx.fillRect(-Wm * 1.5, -Hm * 1.5, Wm * 4, floorY + Hm * 1.5);
+    ctx.fillRect(-Wm * 2, -Hm * 4, Wm * 5, floorY + Hm * 4);
   }
 
   function steelFloor(color, base) {
     ctx.fillStyle = color;
-    ctx.fillRect(-Wm * 1.5, floorY, Wm * 4, Hm * 2);
+    ctx.fillRect(-Wm * 2, floorY, Wm * 5, Hm * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.05)';
-    for (let x = -Wm * 1.5; x < Wm * 2.5; x += 0.25) ctx.fillRect(x, floorY, 0.015, Hm * 2);
-    for (let y = floorY + 0.15; y < floorY + Hm; y += 0.15) ctx.fillRect(-Wm * 1.5, y, Wm * 4, 0.012);
+    for (let x = -Wm * 2; x < Wm * 3; x += 0.25) ctx.fillRect(x, floorY, 0.015, Hm * 2);
+    for (let y = floorY + 0.15; y < floorY + Hm; y += 0.15) ctx.fillRect(-Wm * 2, y, Wm * 5, 0.012);
     ctx.fillStyle = base;
-    ctx.fillRect(-Wm * 1.5, floorY - 0.06, Wm * 4, 0.06);
+    ctx.fillRect(-Wm * 2, floorY - 0.06, Wm * 5, 0.06);
     // bulkheads where the room's walls are
     for (const x of [-0.25, Wm + 0.05]) {
-      rrect(x, -Hm * 1.5, 0.2, floorY + Hm * 1.5, 0, '#2a2d36');
-      for (let y = floorY - 0.3; y > -Hm; y -= 0.6) ellipse(x + 0.1, y, 0.02, 0.02, '#7d8796', false);
+      rrect(x, -Hm * 4, 0.2, floorY + Hm * 4, 0, '#2a2d36');
+      for (let y = floorY - 0.3; y > -Hm * 4; y -= 0.6) ellipse(x + 0.1, y, 0.02, 0.02, '#7d8796', false);
     }
   }
 
@@ -6529,7 +6564,7 @@
     ctx.fillRect(0, 0, W, H);
     // zoom pulls back around the middle of the floor
     const z = zoom;
-    ctx.setTransform(dpr * ppm * z, 0, 0, dpr * ppm * z, dpr * (W / 2 - cx * ppm * z + ox), dpr * (floorY * ppm * (1 - z) + oy));
+    ctx.setTransform(dpr * ppm * z, 0, 0, dpr * ppm * z, dpr * (W / 2 - cx * ppm * z + ox), dpr * (floorY * ppm * (1 - z) + lift * ppm * z + oy));
     ctx.lineJoin = 'round';
 
     drawRoom();
@@ -6740,7 +6775,7 @@
     weapon: (id) => useWeapon(id),
     hole: () => enterHole(),
     game: () => startCyborg(),
-    aim: () => { const t = bodies.filter((b) => b !== desk && b.kind !== 'shard').sort((a, c) => a.getWorldCenter().y - c.getWorldCenter().y)[0]; if (!t) return null; const c = t.getWorldCenter(); return { x: W / 2 + (c.x - cx) * ppm * zoom, y: floorY * ppm - (floorY - c.y) * ppm * zoom }; },
+    aim: () => { const t = bodies.filter((b) => b !== desk && b.kind !== 'shard' && airborne(b)).sort((a, c) => a.getWorldCenter().y - c.getWorldCenter().y)[0]; if (!t) return null; const c = t.getWorldCenter(); return { x: W / 2 + (c.x - cx) * ppm * zoom, y: floorY * ppm - (floorY - c.y - lift) * ppm * zoom }; },
     shoot: (x, y) => shoot(x, y),
     get world() { return document.body.dataset.world; },
     get gameScreen() { return !!gameScreen; },
