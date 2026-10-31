@@ -153,6 +153,10 @@
   const ROBOT_WOODS = [
     { top: '#8a94a3', side: '#5b6170', grain: 'rgba(255,255,255,0.18)', leds: true },
     { top: '#3b3f4a', side: '#2a2d36', grain: 'rgba(120,200,255,0.15)', leds: true },
+    { top: '#e8eaee', side: '#b9bec8', grain: 'rgba(0,0,0,0.06)', leds: true },        // spaceship white
+    { top: '#d9a520', side: '#a77d14', grain: 'rgba(0,0,0,0.25)', leds: true },        // hazard yellow
+    { top: '#5b6b3a', side: '#44512a', grain: 'rgba(0,0,0,0.15)', leds: true },        // army surplus
+    { top: '#8a2a2e', side: '#661e22', grain: 'rgba(0,0,0,0.15)', leds: true },        // red alert
   ];
 
   const GLASS_TOP = { top: 'rgba(190,225,240,0.6)', side: '#c9ccd3', grain: 'rgba(255,255,255,0.5)' };
@@ -2042,6 +2046,201 @@
     };
   }
 
+  // Lightning in a bottle, more or less.
+  function teslaCoil() {
+    return {
+      w: 0.12,
+      place(x, y) {
+        addBody(x, y, [R(-0.05, -0.03, 0.1, 0.03), R(-0.02, -0.17, 0.04, 0.14), { x: 0, y: -0.2, r: 0.04 }], () => {
+          rrect(-0.05, -0.03, 0.1, 0.03, 0.006, '#3b3a44');
+          rrect(-0.02, -0.17, 0.04, 0.14, 0.006, '#c87f3c');
+          for (let k = 0; k < 8; k++) line(-0.02, -0.16 + k * 0.016, 0.02, -0.155 + k * 0.016, '#8a4a1c', 0.003);
+          ctx.beginPath();
+          ctx.ellipse(0, -0.2, 0.04, 0.03, 0, 0, Math.PI * 2);
+          finish(CHROME);
+          if (Math.sin(clock * 9 + x * 5) > 0.2) {
+            ctx.strokeStyle = 'rgba(190,220,255,0.95)';
+            ctx.lineWidth = 0.004;
+            for (let a = 0; a < 3; a++) {
+              ctx.beginPath();
+              let px = 0, py = -0.21;
+              ctx.moveTo(px, py);
+              const ang = rand(-Math.PI, 0);
+              for (let s = 0; s < 4; s++) { px += Math.cos(ang) * 0.025 + rand(-0.01, 0.01); py += Math.sin(ang) * 0.025 + rand(-0.01, 0.01); ctx.lineTo(px, py); }
+              ctx.stroke();
+            }
+          }
+        }, { kind: 'tesla', density: 1 });
+      },
+    };
+  }
+
+  // A brick of punch cards, held together by a rubber band and hope.
+  function punchCards() {
+    return {
+      w: 0.17,
+      place(x, y) {
+        addBody(x, y, [R(-0.08, -0.07, 0.16, 0.07)], () => {
+          for (let k = 0; k < 6; k++) rrect(-0.08 + (k % 2) * 0.004, -0.07 + k * 0.0115, 0.16, 0.012, 0.002, '#efe3bf');
+          rrect(-0.08, -0.075, 0.16, 0.012, 0.002, '#efe3bf');
+          for (let i = 0; i < 9; i++) rrect(-0.07 + i * 0.016, -0.072, 0.005, 0.007, 0, '#3b3a44', false);
+          line(0.03, -0.075, 0.03, 0, '#d94a4a', 0.008);
+        }, { kind: 'cards', density: 0.7 });
+      },
+    };
+  }
+
+  // Glowing orange digits behind glass. It knows what time it is. It knows.
+  function nixieClock() {
+    return {
+      w: 0.2,
+      place(x, y) {
+        const b = addBody(x, y, [R(-0.09, -0.035, 0.18, 0.035), R(-0.085, -0.13, 0.17, 0.095)], () => {
+          rrect(-0.09, -0.035, 0.18, 0.035, 0.008, '#5a3a24');
+          const t = new Date();
+          const digits = `${t.getHours()}`.padStart(2, '0') + `${t.getMinutes()}`.padStart(2, '0');
+          ctx.save();
+          ctx.font = `bold 0.05px ui-monospace, Menlo, monospace`;
+          ctx.textAlign = 'center';
+          for (let i = 0; i < 4; i++) {
+            const tx = -0.063 + i * 0.042;
+            rrect(tx - 0.018, -0.13, 0.036, 0.095, 0.017, 'rgba(214,236,250,0.35)');
+            ctx.shadowColor = '#ff7a1a';
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = '#ffae4a';
+            ctx.fillText(digits[i], tx, -0.06);
+            ctx.shadowBlur = 0;
+          }
+          ctx.restore();
+        }, { kind: 'glass', density: 0.8 });
+        b.breakable = 'glass';
+        b.shatter = () => {
+          spawnShards(b, 0, -0.08, 6, GLASS);
+          sparkBurst(b.getWorldCenter().x, b.getWorldCenter().y, 12);
+          world.destroyBody(b);
+          bodies.splice(bodies.indexOf(b), 1);
+        };
+      },
+    };
+  }
+
+  // A green wave that never stops waving.
+  function oscilloscope() {
+    return {
+      w: 0.24,
+      place(x, y) {
+        addBody(x, y, [R(-0.115, -0.17, 0.23, 0.17)], () => {
+          rrect(-0.115, -0.17, 0.23, 0.17, 0.015, '#c9b98f');
+          rrect(-0.1, -0.155, 0.13, 0.12, 0.012, '#0d1a12');
+          ctx.strokeStyle = '#5dff9a';
+          ctx.lineWidth = 0.004;
+          ctx.beginPath();
+          for (let s = 0; s <= 24; s++) {
+            const u = s / 24;
+            const yy = -0.095 + Math.sin(u * 14 + clock * 6) * 0.03 * Math.sin(clock * 1.3 + u * 3);
+            if (s === 0) ctx.moveTo(-0.095 + u * 0.12, yy); else ctx.lineTo(-0.095 + u * 0.12, yy);
+          }
+          ctx.stroke();
+          for (const [kx, ky] of [[0.065, -0.13], [0.065, -0.085], [0.065, -0.04]]) ellipse(kx, ky, 0.015, 0.015, '#3b3a44');
+          ellipse(0.095, -0.04, 0.006, 0.006, blink(9, 3) ? '#5dff9a' : '#1a4a2a', false);
+        }, { kind: 'scope', density: 1.1 });
+      },
+    };
+  }
+
+  // A brain in a jar. Somebody's backup.
+  function brainJar() {
+    return {
+      w: 0.13,
+      place(x, y) {
+        const b = addBody(x, y, [R(-0.055, -0.03, 0.11, 0.03), R(-0.05, -0.16, 0.1, 0.13), R(-0.035, -0.18, 0.07, 0.02)], () => {
+          rrect(-0.055, -0.03, 0.11, 0.03, 0.006, '#3b3a44');
+          rrect(-0.05, -0.16, 0.1, 0.13, 0.02, 'rgba(120,230,170,0.35)');
+          const bob = Math.sin(clock * 2 + x) * 0.006;
+          ctx.beginPath();
+          ctx.ellipse(0, -0.095 + bob, 0.035, 0.028, 0, 0, Math.PI * 2);
+          finish('#f0a5b5');
+          for (let k = -1; k <= 1; k++) line(k * 0.015, -0.115 + bob, k * 0.012 + 0.005, -0.075 + bob, '#c97085', 0.004);
+          for (let k = 0; k < 3; k++) ellipse(-0.02 + k * 0.02, -0.14 + ((clock * 0.1 + k * 0.33) % 1) * -0.0, 0.005, 0.005, 'rgba(255,255,255,0.6)', false);
+          rrect(-0.035, -0.18, 0.07, 0.02, 0.005, CHROME);
+          line(0.03, -0.18, 0.06, -0.22, INK, 0.004);
+        }, { kind: 'glass', density: 1 });
+        b.breakable = 'glass';
+        b.shatter = () => {
+          spawnShards(b, 0, -0.1, 5, GLASS);
+          spawnShards(b, 0, -0.1, 2, '#f0a5b5');
+          sparkBurst(b.getWorldCenter().x, b.getWorldCenter().y, 8);
+          world.destroyBody(b);
+          bodies.splice(bodies.indexOf(b), 1);
+        };
+      },
+    };
+  }
+
+  // A chrome hand on a stand. It waves sometimes. Nobody asked it to.
+  function robotHand() {
+    return {
+      w: 0.12,
+      place(x, y) {
+        addBody(x, y, [R(-0.05, -0.025, 0.1, 0.025), R(-0.012, -0.1, 0.024, 0.075), R(-0.04, -0.2, 0.08, 0.1)], () => {
+          rrect(-0.05, -0.025, 0.1, 0.025, 0.006, '#2a2d36');
+          rrect(-0.012, -0.1, 0.024, 0.075, 0.006, '#7d8796');
+          ctx.save();
+          ctx.translate(0, -0.1);
+          ctx.rotate(Math.sin(clock * 3 + x * 2) * 0.25 * (Math.sin(clock * 0.4 + x) > 0.6 ? 1 : 0));
+          rrect(-0.035, -0.05, 0.07, 0.05, 0.012, CHROME);
+          for (let k = 0; k < 4; k++) rrect(-0.032 + k * 0.017, -0.1, 0.013, 0.055, 0.006, CHROME);
+          rrect(0.032, -0.06, 0.015, 0.04, 0.007, CHROME);
+          ctx.restore();
+        }, { kind: 'hand', density: 1.2 });
+      },
+    };
+  }
+
+  // A reel-to-reel tape deck, still spinning.
+  function reelTape() {
+    return {
+      w: 0.22,
+      place(x, y) {
+        addBody(x, y, [R(-0.105, -0.2, 0.21, 0.2)], () => {
+          rrect(-0.105, -0.2, 0.21, 0.2, 0.012, '#9aa0aa');
+          for (const dx of [-0.05, 0.05]) {
+            ellipse(dx, -0.14, 0.042, 0.042, '#2a2d36');
+            ctx.save();
+            ctx.translate(dx, -0.14);
+            ctx.rotate(clock * (dx < 0 ? 3 : -3));
+            for (let s = 0; s < 3; s++) { ctx.rotate(2.09); line(0, 0, 0.035, 0, '#c9ccd3', 0.006); }
+            ctx.restore();
+            ellipse(dx, -0.14, 0.008, 0.008, '#c9ccd3', false);
+          }
+          line(-0.05, -0.098, 0.05, -0.098, '#5a3a24', 0.004);
+          rrect(-0.09, -0.07, 0.18, 0.05, 0.006, '#2a2d36', false);
+          for (let i = 0; i < 4; i++) rrect(-0.08 + i * 0.042, -0.06, 0.03, 0.03, 0.004, i === 1 ? '#e04a55' : '#c9ccd3', false);
+        }, { kind: 'reel', density: 1 });
+      },
+    };
+  }
+
+  // A little satellite dish, listening for the mothership.
+  function satDish() {
+    return {
+      w: 0.15,
+      place(x, y) {
+        addBody(x, y, [R(-0.04, -0.03, 0.08, 0.03), R(-0.008, -0.09, 0.016, 0.06), { pts: [[-0.07, -0.16], [0.07, -0.16], [0.04, -0.09], [-0.04, -0.09]] }], () => {
+          rrect(-0.04, -0.03, 0.08, 0.03, 0.006, '#3b3a44');
+          rrect(-0.008, -0.09, 0.016, 0.06, 0.004, '#7d8796');
+          ctx.beginPath();
+          ctx.moveTo(-0.07, -0.16);
+          ctx.quadraticCurveTo(0, -0.04, 0.07, -0.16);
+          ctx.closePath();
+          finish('#e8eaee');
+          line(0, -0.11, 0, -0.17, INK, 0.004);
+          ellipse(0, -0.175, 0.008, 0.008, blink(4, 2) ? '#e04a55' : '#6b1f1f');
+        }, { kind: 'dish', density: 0.7 });
+      },
+    };
+  }
+
   // ---------- item names ----------
   // Every body an item creates is tagged with the item's name, so the
   // damage report can count what was flipped and what got broken.
@@ -2123,6 +2322,14 @@
   chromeSkull = named('Chrome skull', chromeSkull);
   circuitBoard = named('Circuit board', circuitBoard);
   joystick = named('Joystick', joystick);
+  teslaCoil = named('Tesla coil', teslaCoil);
+  punchCards = named('Punch cards', punchCards);
+  nixieClock = named('Nixie clock', nixieClock);
+  oscilloscope = named('Oscilloscope', oscilloscope);
+  brainJar = named('Brain in a jar', brainJar);
+  robotHand = named('Robot hand', robotHand);
+  reelTape = named('Tape deck', reelTape);
+  satDish = named('Satellite dish', satDish);
   const ROBOT_ITEM_NAMES = ITEM_NAMES.slice(firstRobotItem);
 
   // Swag unlocks as the flip count grows; each new item is guaranteed a spot
@@ -2198,18 +2405,33 @@
     return shuffle(extras);
   }
 
-  const ROBOT_EXTRAS = [robotToy, oilCan, gear, battery, floppyDisk, vacuumTube, circuitBoard, joystick, mug];
+  const ROBOT_EXTRAS = [robotToy, oilCan, gear, battery, floppyDisk, vacuumTube, circuitBoard, joystick, mug,
+    teslaCoil, punchCards, nixieClock, oscilloscope, brainJar, robotHand, reelTape, satDish];
+
+  // Old iron, mostly: green-screen terminals and the odd modern machine.
+  const ROBOT_COMPUTERS = [
+    () => [crt(), keyboard(), joystick()],
+    () => [crt(), keyboard(), mouse()],
+    () => [retroDesktop(), keyboard()],
+    () => [tower(), crt(), keyboard()],
+    () => [tower(), monitor(0.5), monitor(0.5), keyboard()],
+    () => [monitor(), keyboard(), mouse()],
+    () => [widescreen(), keyboard(), joystick()],
+    () => [armSetup(2)],
+    () => [laptop(), mouse()],
+    () => [oscilloscope(), crt(), keyboard()],
+  ];
 
   function buildRobotItems() {
     const extras = [];
     if (chance(0.5)) extras.push(chromeSkull());
-    for (const make of shuffle(ROBOT_EXTRAS.slice()).slice(0, randInt(2, 4))) extras.push(make());
+    for (const make of shuffle(ROBOT_EXTRAS.slice()).slice(0, randInt(3, 5))) extras.push(make());
     return shuffle(extras);
   }
 
   function buildItems() {
     const deskTop = floorY - DESK_H - 0.001;
-    const comp = pick(COMPUTERS)();
+    const comp = pick(robotWorld ? ROBOT_COMPUTERS : COMPUTERS)();
     if (chance(0.5)) comp.reverse();
     const extras = robotWorld ? buildRobotItems() : mouseWorld ? buildMouseItems() : [];
     if (mouseWorld || robotWorld) {
@@ -3435,6 +3657,11 @@
         burst('highpass', 2500, 0.7, 0.5, 0.08);
         tone('sine', 120, 0.8, 0.35, 0, 35);
       },
+      brrt() {
+        if (!ready()) return;
+        burst('bandpass', 900, 1.5, 0.3, 0.04);
+        tone('square', 80, 0.1, 0.04, 0, 50);
+      },
       pump() {
         if (!ready()) return;
         burst('bandpass', 1800, 4, 0.35, 0.04);
@@ -4047,12 +4274,27 @@
     { id: 'flood', name: 'The Flood', icon: '\u{1F30A}', price: 150000, blurb: 'Someone left the tap on. Everything floats. The computers do not survive.' },
   ];
   const MOUSE_MOVED = { sword: 'catapult', grenade: 'termites', laser: 'paw', nuke: 'flood' };
-  // The robot world has the shotgun instead of a store.
-  const arms = () => (robotWorld ? [] : mouseWorld ? MOUSE_WEAPONS : WEAPONS);
+  // The robot world's armory sells upgrades for the shotgun and bigger guns
+  // to swap it for. Upgrades work on every gun.
+  const ROBOT_ARMS = [
+    { id: 'pump', gear: 'upgrade', name: 'Hydraulic pump', icon: '\u{1F527}', price: 12000, blurb: 'Upgrade. The gun racks itself: every gun fires twice as fast.' },
+    { id: 'choke', gear: 'upgrade', name: 'Wide choke', icon: '\u{1F3AF}', price: 25000, blurb: 'Upgrade. A much wider spread. Hard to miss now.' },
+    { id: 'shells', gear: 'upgrade', name: 'Explosive shells', icon: '\u{1F9E8}', price: 45000, blurb: 'Upgrade. Every hit goes off and takes the neighbors with it.' },
+    { id: 'minigun', gear: 'gun', name: 'Minigun', icon: '\u{1F300}', price: 80000, blurb: 'Hold to spray. Six barrels, no patience.' },
+    { id: 'plasma', gear: 'gun', name: 'Plasma rifle', icon: '\u{1F52E}', price: 120000, blurb: 'A beam that goes through everything in a line, and keeps going.' },
+    { id: 'rocket', gear: 'gun', name: 'Rocket launcher', icon: '\u{1F680}', price: 180000, blurb: 'One rocket, one very large hole in the air.' },
+  ];
+  const SHOTGUN = { id: 'shotgun', gear: 'gun', name: 'Shotgun', icon: '\u{1F4A5}' };
+  let gunId = 'shotgun';
+  try { gunId = localStorage.getItem('flippydesk.robot.gun') || 'shotgun'; } catch (e) { /* private mode */ }
+  let firing = null;          // the minigun's held trigger: { x, y }
+  let beams = [];             // plasma beams, in screen space
+  let rockets = [];           // rockets on the way: { sx, sy, tx, ty, t }
+  const arms = () => (robotWorld ? ROBOT_ARMS : mouseWorld ? MOUSE_WEAPONS : WEAPONS);
   const TRY_ALL = /[?&]armory\b/.test(location.search);
   let cash = 0;
   let owned = [];
-  const bankKey = (k) => (mouseWorld ? `flippydesk.mouse.${k}` : `flippydesk.${k}`);
+  const bankKey = (k) => (robotWorld ? `flippydesk.robot.${k}` : mouseWorld ? `flippydesk.mouse.${k}` : `flippydesk.${k}`);
 
   // Each world has its own bank; load the one for the world we're in.
   function loadBank() {
@@ -4093,9 +4335,9 @@
   function showBank(bump) {
     shopBtn.querySelector('.n').textContent = short(cash);
     const locked = storeLock();
-    shopBtn.querySelector('.boom').textContent = locked ? '\u{1F512}' : mouseWorld ? '\u{1F9C0}' : '\u{1F6D2}';
+    shopBtn.querySelector('.boom').textContent = locked ? '\u{1F512}' : robotWorld ? '\u{1F916}' : mouseWorld ? '\u{1F9C0}' : '\u{1F6D2}';
     if (wasLocked && !locked) {
-      toastEl.textContent = `The ${mouseWorld ? 'Mouse ' : ''}Armory is open!`;
+      toastEl.textContent = `The ${robotWorld ? 'SKYDESK ' : mouseWorld ? 'Mouse ' : ''}Armory is open!`;
       toastEl.classList.remove('show');
       void toastEl.offsetWidth;
       toastEl.classList.add('show');
@@ -4107,6 +4349,7 @@
       shopBtn.classList.add('bump');
     }
     arsenalEl.textContent = '';
+    if (robotWorld) return showGuns();
     for (const w of arms()) {
       if (!has(w.id)) continue;
       const b = document.createElement('button');
@@ -4117,7 +4360,7 @@
       b.addEventListener('click', () => { sfx.unlock(); useWeapon(w.id); });
       arsenalEl.appendChild(b);
     }
-    arsenalEl.classList.toggle('busy', state !== 'ready');
+    arsenalEl.classList.toggle('busy', state !== 'ready' && !robotWorld);
   }
 
   // Each world's armory opens once 3/4 of that world's items have turned up.
@@ -4127,7 +4370,7 @@
     if (TRY_ALL) return null;
     const mouseNames = new Set(MOUSE_ITEM_NAMES.concat(ROBOT_ITEM_NAMES));
     const swagNames = new Set(UNLOCKS.map((u) => u.name));
-    const all = mouseWorld
+    const all = robotWorld ? ROBOT_ITEM_NAMES : mouseWorld
       ? MOUSE_ITEM_NAMES
       : ['Desk', ...ITEM_NAMES.filter((n) => !swagNames.has(n) && !mouseNames.has(n)), ...swagNames];
     const have = all.filter((name) => items[name] && items[name].flipped).length;
@@ -4137,10 +4380,12 @@
 
   function openStore() {
     const lock = storeLock();
-    storeEl.querySelector('h2').textContent = mouseWorld ? 'Mouse Armory' : 'Armory';
+    storeEl.querySelector('h2').textContent = robotWorld ? 'SKYDESK Armory' : mouseWorld ? 'Mouse Armory' : 'Armory';
     storeEl.querySelector('.bank').textContent = lock
-      ? `Locked until you\u2019ve discovered 3/4 of the ${mouseWorld ? 'Mouse World ' : ''}items: ${lock.have} of ${lock.total} found, ${lock.need - lock.have} more to go. Your ${cash.toLocaleString()} points are saving up in the meantime.`
-      : mouseWorld
+      ? `Locked until you\u2019ve discovered 3/4 of the ${robotWorld ? 'robot ' : mouseWorld ? 'Mouse World ' : ''}items: ${lock.have} of ${lock.total} found, ${lock.need - lock.have} more to go. Your ${cash.toLocaleString()} points are saving up in the meantime.`
+      : robotWorld
+        ? `You have ${cash.toLocaleString()} robot-world points to spend. Upgrades fit every gun; new guns show up on the right to switch to.`
+        : mouseWorld
         ? `You have ${cash.toLocaleString()} Mouse World points to spend. Points scored on this side of the wall go in this bank.`
         : `You have ${cash.toLocaleString()} points to spend. Every point you score goes in the bank.`;
     const list = storeEl.querySelector('ul');
@@ -4175,7 +4420,8 @@
           showBank(false);
           sfx.unlock();
           sfx.ding(true);
-          toastEl.textContent = !mouseWorld && WEAPONS.every((x) => has(x.id)) ? 'You hear scratching under the desk\u2026' : `${w.name} acquired`;
+          if (robotWorld && w.gear === 'gun') equipGun(w.id);
+          toastEl.textContent = robotWorld ? `${w.name} ${w.gear === 'upgrade' ? 'installed' : 'acquired'}` : !mouseWorld && WEAPONS.every((x) => has(x.id)) ? 'You hear scratching under the desk\u2026' : `${w.name} acquired`;
           toastEl.classList.remove('show');
           void toastEl.offsetWidth;
           toastEl.classList.add('show');
@@ -5347,7 +5593,7 @@
   }
 
   function updateScore() {
-    arsenalEl.classList.toggle('busy', state !== 'ready');
+    arsenalEl.classList.toggle('busy', state !== 'ready' && !robotWorld);
     if (state === 'ready' || state === 'fadein') {
       scoreEl.classList.remove('show');
     } else {
@@ -6197,52 +6443,187 @@
     ctx.restore();
   }
 
-  // ----- the shotgun -----
+  // ----- the guns -----
 
-  function shoot(px, py) {
-    if (clock - gun.last < 0.32) return;
-    gun.last = clock;
-    gun.kick = 1;
-    gun.aim = { x: px, y: py };
-    sfx.shotgun();
-    setTimeout(() => sfx.pump(), 180);
-    const p = toWorld(px, py);
-    tracers.push({ x: px, y: py, t: 0, spread: Array.from({ length: 7 }, () => [rand(-14, 14), rand(-14, 14)]) });
-    let hits = 0;
-    for (const b of bodies.slice()) {
+
+  const GUNS = {
+    shotgun: { wait: 0.32, reach: 0.06, pellets: 7 },
+    minigun: { wait: 0.075, reach: 0.04, pellets: 1 },
+    plasma: { wait: 0.6 },
+    rocket: { wait: 0.85 },
+  };
+
+  function equipGun(id) {
+    gunId = id === 'shotgun' || has(id) ? id : 'shotgun';
+    try { localStorage.setItem('flippydesk.robot.gun', gunId); } catch (e) { /* private mode */ }
+    showBank(false);
+  }
+
+  // In the robot world the arsenal is a gun rack: tap one to switch.
+  function showGuns() {
+    if (gunId !== 'shotgun' && !has(gunId)) gunId = 'shotgun';
+    for (const w of [SHOTGUN, ...ROBOT_ARMS.filter((x) => x.gear === 'gun' && has(x.id))]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = w.icon;
+      b.title = w.name;
+      b.className = w.id === gunId ? 'on' : '';
+      b.setAttribute('aria-label', `Switch to the ${w.name}`);
+      b.setAttribute('aria-pressed', String(w.id === gunId));
+      b.addEventListener('click', () => { sfx.unlock(); sfx.pump(); equipGun(w.id); });
+      arsenalEl.appendChild(b);
+    }
+    arsenalEl.classList.toggle('busy', false);
+  }
+
+  // Where the gun's muzzle is on screen, pointing at (px, py).
+  function muzzleAt(px, py) {
+    const S = Math.min(W, H) / 700;
+    const gx = W - 40 * S, gy = H + 10 * S;
+    const ang = Math.atan2(py - gy, px - gx);
+    const len = gunId === 'rocket' ? 300 : gunId === 'minigun' ? 310 : 330;
+    return { x: gx + Math.cos(ang) * len * S, y: gy + Math.sin(ang) * len * S, ang };
+  }
+
+  // Shots that hit the desk in the air bounce it back up too.
+  function shootDesk(p, push) {
+    if (!airborne(desk)) return false;
+    for (let f = desk.getFixtureList(); f; f = f.getNext()) {
+      if (!f.testPoint(V(p.x, p.y))) continue;
+      const v = desk.getLinearVelocity();
+      desk.setLinearVelocity(V(v.x * 0.6 + rand(-0.5, 0.5), Math.min(v.y, 0) - push));
+      desk.setAngularVelocity(desk.getAngularVelocity() + rand(-3, 3));
+      desk.hit = Math.max(desk.hit || 0, 5);
+      gun.combo++;
+      const c = desk.getWorldCenter();
+      addPoints(200 * Math.min(5, gun.combo), 'desk juggle!', c.x, c.y - 0.3);
+      return true;
+    }
+    return false;
+  }
+
+  // Everything airborne within reach of p.
+  function targetsAt(p, reach) {
+    const out = [];
+    for (const b of bodies) {
       if (b === desk || b.kind === 'shard' || !airborne(b)) continue;
       const c = b.getWorldCenter();
-      let hit = Math.hypot(c.x - p.x, c.y - p.y) < 0.15;
+      let hit = Math.hypot(c.x - p.x, c.y - p.y) < reach + 0.09;
       for (let f = b.getFixtureList(); f && !hit; f = f.getNext()) {
-        for (const [dx, dy] of [[0, 0], [0.06, 0], [-0.06, 0], [0, 0.06], [0, -0.06]]) {
-          if (f.testPoint(V(p.x + dx, p.y + dy))) { hit = true; break; }
+        for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]) {
+          if (f.testPoint(V(p.x + dx * reach, p.y + dy * reach))) { hit = true; break; }
         }
       }
-      if (!hit) continue;
-      hits++;
-      blastBody(b);
+      if (hit) out.push(b);
     }
-    if (!hits && airborne(desk)) {
-      for (let f = desk.getFixtureList(); f; f = f.getNext()) {
-        if (!f.testPoint(V(p.x, p.y))) continue;
-        desk.applyLinearImpulse(V(rand(-0.3, 0.3) * desk.getMass(), -1.5 * desk.getMass()), V(p.x, p.y), true);
-        desk.hit = Math.max(desk.hit || 0, 5);
+    return out;
+  }
+
+  // An explosive shell or a rocket going off: blasts every airborne piece
+  // nearby and shoves the rest.
+  function explodeAt(x, y, radius, spare) {
+    fireball(x, y, radius > 0.6 ? 14 : 6, radius);
+    sfx.boom(radius > 0.6 ? 1 : 0.4);
+    shake = Math.max(shake, radius > 0.6 ? 0.8 : 0.3);
+    let n = 0;
+    for (const b of targetsAt({ x, y }, radius)) { if (b !== spare) { blastBody(b); n++; } }
+    blast(x, y, radius * 1.5, radius);
+    return n;
+  }
+
+  function shoot(px, py) {
+    const g = GUNS[gunId] || GUNS.shotgun;
+    if (clock - gun.last < g.wait * (has('pump') ? 0.5 : 1)) return;
+    gun.last = clock;
+    gun.kick = gunId === 'minigun' ? 0.5 : 1;
+    gun.aim = { x: px, y: py };
+    const p = toWorld(px, py);
+    let hits = 0;
+    if (gunId === 'plasma') {
+      // straight through everything from the muzzle to the edge of the screen
+      sfx.zap();
+      const m = muzzleAt(px, py);
+      const far = { x: m.x + Math.cos(m.ang) * (W + H) * 2, y: m.y + Math.sin(m.ang) * (W + H) * 2 };
+      beams.push({ x0: m.x, y0: m.y, x1: far.x, y1: far.y, t: 0 });
+      const a = toWorld(m.x, m.y), z = toWorld(far.x, far.y);
+      const len = Math.hypot(z.x - a.x, z.y - a.y), seen = new Set();
+      for (let d = 0; d < len; d += 0.06) {
+        const q = { x: a.x + (z.x - a.x) * d / len, y: a.y + (z.y - a.y) * d / len };
+        for (const b of targetsAt(q, has('choke') ? 0.08 : 0.03)) {
+          if (seen.has(b)) continue;
+          seen.add(b);
+          juggle(b, { x: b.getWorldCenter().x, y: b.getWorldCenter().y + 0.1 }, 1.2);
+          hits++;
+        }
+        if (!seen.has(desk) && shootDesk(q, 5)) { seen.add(desk); hits++; }
+      }
+    } else if (gunId === 'rocket') {
+      sfx.whoosh(1.5);
+      const m = muzzleAt(px, py);
+      rockets.push({ sx: m.x, sy: m.y, tx: p.x, ty: p.y, t: 0 });
+      return;
+    } else {
+      if (gunId === 'minigun') sfx.brrt(); else { sfx.shotgun(); setTimeout(() => sfx.pump(), 180); }
+      const reach = g.reach * (has('choke') ? 2.2 : 1);
+      tracers.push({ x: px, y: py, t: 0, spread: Array.from({ length: g.pellets }, () => [rand(-14, 14) * (reach / 0.06), rand(-14, 14) * (reach / 0.06)]) });
+      for (const b of targetsAt(p, reach)) {
+        const c = b.getWorldCenter();
+        juggle(b, p, gunId === 'minigun' ? 0.75 : 1);
+        hits++;
+        if (has('shells')) hits += explodeAt(c.x, c.y, 0.45, b);
+      }
+      if (!hits && shootDesk(p, gunId === 'minigun' ? 1.5 : 5)) {
         hits = 1;
-        break;
+        if (has('shells')) explodeAt(p.x, p.y, 0.45);
       }
     }
     if (!hits) gun.combo = 0;
     sparkBurst(p.x, p.y, hits ? 18 : 6);
   }
 
-  function blastBody(b) {
+  function updateShots(dt) {
+    for (const b of beams) b.t += dt;
+    beams = beams.filter((b) => b.t < 0.3);
+    for (const r of rockets) {
+      r.t += dt;
+      if (r.t >= 0.28 && !r.done) {
+        r.done = true;
+        if (!explodeAt(r.tx, r.ty, has('choke') ? 1.4 : 1.05)) gun.combo = 0;
+        shootDesk({ x: r.tx, y: r.ty }, 7);
+      }
+    }
+    rockets = rockets.filter((r) => !r.done);
+    if (firing && robotWorld && state === 'flipped' && gunId === 'minigun') shoot(firing.x, firing.y);
+    if (state !== 'flipped') firing = null;
+  }
+
+  // A hit knocks a piece back up into the air. Each juggle of the same piece
+  // is worth more, and the sixth one blows it apart.
+  const JUGGLE_MAX = 6;
+
+  function juggle(b, from, power = 1) {
+    if (!bodies.includes(b)) return;
+    b.juggles = (b.juggles || 0) + 1;
+    if (b.juggles >= JUGGLE_MAX) return blastBody(b);
     const c = b.getWorldCenter();
-    const air = true;   // only airborne things get shot
-    gun.combo = air ? gun.combo + 1 : 0;
-    const mult = air ? Math.min(5, gun.combo) : 1;
-    const pts = (air ? 300 : 150) * mult;
-    if (air) logDamage('blasted');
-    addPoints(pts, air ? (mult > 1 ? `airborne x${mult}!` : 'airborne!') : 'blasted', c.x, c.y);
+    gun.combo++;
+    const mult = Math.min(5, gun.combo);
+    addPoints(150 * b.juggles * mult, b.juggles > 1 ? `juggle x${b.juggles}${mult > 1 ? ` \u00b7 combo x${mult}` : ''}` : mult > 1 ? `airborne x${mult}!` : 'airborne!', c.x, c.y);
+    const v = b.getLinearVelocity();
+    b.setLinearVelocity(V(clamp(v.x * 0.4 + (c.x - from.x) * 12 + rand(-1, 1), -4, 4), -(7 + b.juggles * 1.2) * power));
+    b.setAngularVelocity(rand(-14, 14));
+    b.hit = Math.max(b.hit || 0, 2);
+    booms.push({ x: c.x, y: c.y, vx: 0, vy: 0, r: 0.08, t: 0, life: 0.2 });
+  }
+
+  function blastBody(b) {
+    if (!bodies.includes(b)) return;   // already blown up by a neighbor
+    const c = b.getWorldCenter();
+    gun.combo++;
+    const mult = Math.min(5, gun.combo);
+    const j = b.juggles || 0;
+    logDamage('blasted');
+    addPoints((300 + j * 250) * mult, j ? `juggled x${j}, kaboom!` : mult > 1 ? `airborne x${mult}!` : 'airborne!', c.x, c.y);
     spawnShards(b, b.getLocalCenter().x, b.getLocalCenter().y, 5, pick([CHROME, '#3b3a44', '#e66b6b', '#f2c14e']));
     for (let i = 0; i < 4; i++) smoke.push({ x: c.x + rand(-0.05, 0.05), y: c.y, r: rand(0.04, 0.07), t: -rand(0, 0.2), life: rand(1, 1.8), vx: rand(-0.2, 0.2), shade: rand(60, 100) });
     booms.push({ x: c.x, y: c.y, vx: 0, vy: 0, r: 0.12, t: 0, life: 0.3 });
@@ -6268,23 +6649,23 @@
     for (const t of tracers) t.t += dt;
     tracers = tracers.filter((t) => t.t < 0.15);
     if (state !== 'flipped') gun.combo = 0;
+    updateShots(dt);
   }
 
-  // Your shotgun, bottom right, in screen space.
+  // Your gun, bottom right, in screen space.
   function drawGun() {
     if (!robotWorld || cyborg) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const S = Math.min(W, H) / 700;
     const gx = W - 40 * S, gy = H + 10 * S;
-    const aim = gun.aim && clock - gun.last < 1.2 ? gun.aim : { x: W * 0.4, y: H * 0.35 };
-    const ang = Math.atan2(aim.y - gy, aim.x - gx);
-    const muzzle = { x: gx + Math.cos(ang) * 330 * S, y: gy + Math.sin(ang) * 330 * S };
+    const aim = (firing || (gun.aim && clock - gun.last < 1.2 && gun.aim)) || { x: W * 0.4, y: H * 0.35 };
+    const m = muzzleAt(aim.x, aim.y), ang = m.ang;
     for (const t of tracers) {
       ctx.strokeStyle = `rgba(255,230,150,${1 - t.t / 0.15})`;
       ctx.lineWidth = 2 * S;
       for (const [dx, dy] of t.spread) {
         ctx.beginPath();
-        ctx.moveTo(muzzle.x, muzzle.y);
+        ctx.moveTo(m.x, m.y);
         ctx.lineTo(t.x + dx * S, t.y + dy * S);
         ctx.stroke();
       }
@@ -6293,26 +6674,92 @@
       ctx.arc(t.x, t.y, 26 * S, 0, Math.PI * 2);
       ctx.fill();
     }
+    for (const b of beams) {
+      const k = 1 - b.t / 0.3;
+      ctx.lineCap = 'round';
+      for (const [wd, c] of [[34, `rgba(80,220,255,${0.25 * k})`], [16, `rgba(140,240,255,${0.7 * k})`], [5, `rgba(255,255,255,${k})`]]) {
+        ctx.strokeStyle = c;
+        ctx.lineWidth = wd * S * (0.6 + k * 0.4);
+        ctx.beginPath();
+        ctx.moveTo(b.x0, b.y0);
+        ctx.lineTo(b.x1, b.y1);
+        ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+    }
+    for (const r of rockets) {
+      // fly from the muzzle to where the target is on screen now
+      const k = Math.min(1, r.t / 0.28);
+      const tx = W / 2 + (r.tx - cx) * ppm * zoom, ty = floorY * ppm - (floorY - r.ty - lift) * ppm * zoom;
+      const x = r.sx + (tx - r.sx) * k, y = r.sy + (ty - r.sy) * k;
+      const a = Math.atan2(ty - r.sy, tx - r.sx);
+      ctx.strokeStyle = 'rgba(200,200,200,0.5)';
+      ctx.lineWidth = 10 * S;
+      ctx.beginPath();
+      ctx.moveTo(r.sx, r.sy);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(a);
+      ctx.fillStyle = '#ffb33d';
+      ctx.beginPath();
+      ctx.moveTo(-30 * S, 0);
+      ctx.lineTo(-60 * S - rand(0, 20) * S, -8 * S);
+      ctx.lineTo(-60 * S - rand(0, 20) * S, 8 * S);
+      ctx.fill();
+      ctx.fillStyle = '#5b6b3a';
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2 * S;
+      ctx.beginPath();
+      ctx.roundRect(-30 * S, -8 * S, 50 * S, 16 * S, 8 * S);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
     ctx.save();
     ctx.translate(gx - Math.cos(ang) * gun.kick * 30 * S, gy - Math.sin(ang) * gun.kick * 30 * S);
     ctx.rotate(ang - gun.kick * 0.15);
-    const pump = clock - gun.last > 0.18 && clock - gun.last < 0.42 ? -Math.sin(((clock - gun.last - 0.18) / 0.24) * Math.PI) * 50 * S : 0;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = INK;
     ctx.lineWidth = 3 * S;
     const rr = (x, y, w, h, r, c) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = c; ctx.fill(); ctx.stroke(); };
-    rr(-40 * S, -22 * S, 120 * S, 40 * S, 10 * S, '#6b4329');
-    rr(70 * S, -24 * S, 90 * S, 30 * S, 6 * S, '#2a2d36');
-    rr(150 * S, -20 * S, 190 * S, 14 * S, 4 * S, '#3b3f4a');
-    rr(150 * S, -5 * S, 160 * S, 12 * S, 4 * S, '#2a2d36');
-    rr(190 * S + pump, -12 * S, 80 * S, 26 * S, 8 * S, '#8a5a3b');
-    if (gun.kick > 0.75) {
+    let tip = 340;
+    if (gunId === 'minigun') {
+      tip = 310;
+      rr(-40 * S, -26 * S, 130 * S, 48 * S, 12 * S, '#3b3f4a');
+      rr(60 * S, -40 * S, 50 * S, 20 * S, 8 * S, '#d9a520');
+      const spin = clock * (firing ? 40 : 2);
+      for (let i = 0; i < 3; i++) rr(90 * S, (-18 + 12 * i + Math.sin(spin + i * 2.1) * 3) * S, 220 * S, 10 * S, 4 * S, i === 1 ? '#5b6170' : '#2a2d36');
+      rr(250 * S, -24 * S, 20 * S, 48 * S, 4 * S, '#20242e');
+    } else if (gunId === 'plasma') {
+      rr(-40 * S, -24 * S, 140 * S, 44 * S, 16 * S, '#e8eaee');
+      rr(90 * S, -18 * S, 230 * S, 32 * S, 14 * S, '#c9ccd3');
+      const glow = 0.5 + 0.5 * Math.sin(clock * 6);
+      for (let i = 0; i < 4; i++) rr((130 + i * 45) * S, -14 * S, 22 * S, 24 * S, 8 * S, `rgba(80,220,255,${0.5 + glow * 0.5})`);
+      rr(310 * S, -10 * S, 30 * S, 16 * S, 6 * S, '#2a2d36');
+    } else if (gunId === 'rocket') {
+      tip = 300;
+      rr(-20 * S, -30 * S, 320 * S, 56 * S, 22 * S, '#5b6b3a');
+      rr(40 * S, 20 * S, 26 * S, 40 * S, 6 * S, '#2a2d36');
+      rr(120 * S, -46 * S, 60 * S, 20 * S, 6 * S, '#2a2d36');
+      rr(280 * S, -34 * S, 30 * S, 64 * S, 10 * S, '#3b3f4a');
+    } else {
+      const pump = clock - gun.last > 0.18 && clock - gun.last < 0.42 ? -Math.sin(((clock - gun.last - 0.18) / 0.24) * Math.PI) * 50 * S : 0;
+      rr(-40 * S, -22 * S, 120 * S, 40 * S, 10 * S, '#6b4329');
+      rr(70 * S, -24 * S, 90 * S, 30 * S, 6 * S, '#2a2d36');
+      rr(150 * S, -20 * S, 190 * S, 14 * S, 4 * S, '#3b3f4a');
+      rr(150 * S, -5 * S, 160 * S, 12 * S, 4 * S, '#2a2d36');
+      rr(190 * S + pump, -12 * S, 80 * S, 26 * S, 8 * S, '#8a5a3b');
+    }
+    if (gun.kick > 0.45 && gunId !== 'plasma') {
       ctx.fillStyle = '#fff1a8';
       ctx.beginPath();
-      ctx.moveTo(340 * S, -14 * S);
+      ctx.moveTo(tip * S, -2 * S);
+      const big = gunId === 'minigun' ? 0.6 : 1;
       for (let i = 0; i < 9; i++) {
-        const a = -0.9 + (i / 8) * 1.8, r = (i % 2 ? 40 : 90) * S;
-        ctx.lineTo(340 * S + Math.cos(a) * r, -14 * S + Math.sin(a) * r);
+        const a = -0.9 + (i / 8) * 1.8, r = (i % 2 ? 40 : 90) * S * big;
+        ctx.lineTo(tip * S + Math.cos(a) * r, -2 * S + Math.sin(a) * r);
       }
       ctx.fill();
     }
@@ -6517,6 +6964,147 @@
         steelFloor('#262022', '#4a3a3d');
       },
     },
+    // A white spaceship corridor. The eye is very calm about all this.
+    podbay: {
+      ink: '#2a2d36', fade: '#d9dde3', robot: true,
+      draw() {
+        bigFill('#c9ced6', '#eef0f3');
+        // curved wall ribs
+        for (let x = -Wm * 1.5; x < Wm * 2.5; x += 0.7) {
+          rrect(x, -Hm * 4, 0.08, floorY + Hm * 4, 0.02, '#b9bec8', false);
+          for (let y = floorY - 0.4; y > -Hm * 4; y -= 0.9) rrect(x + 0.12, y - 0.3, 0.46, 0.3, 0.04, '#e3e6eb', false);
+        }
+        // a round porthole full of stars
+        const w = windowSpot();
+        const r = Math.min(0.42, w.wh * 0.55);
+        const px = w.wx + w.ww / 2, py = w.wy + w.wh / 2;
+        ctx.beginPath();
+        ctx.ellipse(px, py, r + 0.05, r + 0.05, 0, 0, Math.PI * 2);
+        finish('#9aa0aa');
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(px, py, r, r, 0, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.fillStyle = '#05060c';
+        ctx.fillRect(px - r, py - r, r * 2, r * 2);
+        for (const [u, v] of room.specks.slice(0, 40)) ellipse(px - r + u * r * 2, py - r + v * r * 2, 0.006, 0.006, '#ffffff', false);
+        ellipse(px + r * 0.3, py + r * 0.5, r * 0.45, r * 0.45, '#c8783c', false);
+        ctx.restore();
+        // the sign nobody is allowed to change
+        ctx.save();
+        ctx.font = `bold ${Math.min(0.06, Wm * 0.025)}px ui-monospace, Menlo, monospace`;
+        ctx.fillStyle = '#e04a55';
+        ctx.fillText('POD BAY DOORS: CLOSED', Math.max(0.1, cx - DESK_W / 2), Math.max(0.15, w.wy - 0.05));
+        ctx.restore();
+        aiEye(Math.max(0.3, cx - DESK_W / 2 - 0.35), floorY - DESK_H - 0.35, 1.1);
+        steelFloor('#c9ced6', '#9aa0aa');
+      },
+    },
+    // An assembly line building more of them.
+    factory: {
+      ink: '#ffe9a8', fade: '#1c1a14', robot: true,
+      draw() {
+        bigFill('#14130f', '#3a3424');
+        // endoskeletons hanging off the line
+        for (let x = -Wm; x < Wm * 2; x += 0.6) {
+          const sway = Math.sin(clock * 1.2 + x) * 0.05;
+          const top = floorY - 2.1;
+          line(x, -Hm * 4, x, top, '#5b6170', 0.012);
+          ctx.save();
+          ctx.translate(x, top);
+          ctx.rotate(sway);
+          ctx.globalAlpha = 0.55;
+          ellipse(0, 0.08, 0.06, 0.07, CHROME, false);
+          for (const s of [-1, 1]) ellipse(s * 0.022, 0.08, 0.012, 0.01, '#e02020', false);
+          line(0, 0.15, 0, 0.5, '#9aa0aa', 0.025);
+          for (let k = 0; k < 4; k++) line(-0.07, 0.2 + k * 0.06, 0.07, 0.2 + k * 0.06, '#9aa0aa', 0.01);
+          for (const s of [-1, 1]) { line(s * 0.07, 0.2, s * 0.1, 0.45, '#9aa0aa', 0.015); line(s * 0.04, 0.5, s * 0.06, 0.85, '#9aa0aa', 0.018); }
+          ctx.restore();
+          ctx.globalAlpha = 1;
+        }
+        // a robot welding arm by the wall, busy
+        for (const [ax, dir] of [[Math.max(0.25, cx - DESK_W / 2 - 0.45), 1], [Math.min(Wm - 0.25, cx + DESK_W / 2 + 0.45), -1]]) {
+          const a1 = -1.2 + Math.sin(clock * 1.7 + ax) * 0.3, a2 = 0.9 + Math.sin(clock * 2.3 + ax) * 0.4;
+          rrect(ax - 0.12, floorY - 0.12, 0.24, 0.12, 0.02, '#d9a520');
+          const ex = ax + Math.cos(a1) * 0.6 * dir, ey = floorY - 0.12 + Math.sin(a1) * 0.6;
+          const tx = ex + Math.cos(a1 + a2) * 0.45 * dir, ty = ey + Math.sin(a1 + a2) * 0.45;
+          line(ax, floorY - 0.12, ex, ey, '#d9a520', 0.07);
+          line(ex, ey, tx, ty, '#d9a520', 0.05);
+          ellipse(ex, ey, 0.045, 0.045, '#3b3a44');
+          if (Math.sin(clock * 11 + ax) > 0.3) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ellipse(tx, ty, 0.06, 0.06, 'rgba(160,200,255,0.6)', false);
+            ctx.restore();
+          }
+        }
+        // hazard stripes along the floor
+        steelFloor('#2a271e', '#3b3a44');
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-Wm * 2, floorY - 0.1, Wm * 5, 0.06);
+        ctx.clip();
+        for (let x = -Wm * 2; x < Wm * 3; x += 0.12) poly([[x, floorY - 0.1], [x + 0.06, floorY - 0.1], [x + 0.12, floorY - 0.04], [x + 0.06, floorY - 0.04]], '#f2c14e', false);
+        ctx.restore();
+      },
+    },
+    // The future, which is not going great. Searchlights, smoke and a bunker.
+    bunker: {
+      ink: '#ffd9c2', fade: '#1a0d0a', robot: true,
+      draw() {
+        bigFill('#0a0508', '#4a1a12');
+        // a ruined skyline under a red sky, through a wide slit
+        const w = windowSpot();
+        const sx = -Wm, sw = Wm * 3, sy = w.wy, sh = w.wh;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(sx, sy, sw, sh);
+        ctx.clip();
+        const g = ctx.createLinearGradient(0, sy, 0, sy + sh);
+        g.addColorStop(0, '#2a0a0a');
+        g.addColorStop(1, '#a0381c');
+        ctx.fillStyle = g;
+        ctx.fillRect(sx, sy, sw, sh);
+        for (const s of room.skyline) {
+          const bx = sx + s.x * sw, bh = s.h * sh * 0.45;
+          poly([[bx, sy + sh], [bx, sy + sh - bh], [bx + s.w * 0.4, sy + sh - bh * 0.8], [bx + s.w, sy + sh - bh * 1.05], [bx + s.w, sy + sh]], '#1a0c0c', false);
+        }
+        // hunter drones sweeping searchlights
+        for (let i = 0; i < 2; i++) {
+          const hx = sx + sw * (((clock * 0.04 + i * 0.5) % 1)), hy = sy + sh * (0.2 + i * 0.12);
+          ctx.fillStyle = 'rgba(255,240,200,0.12)';
+          ctx.beginPath();
+          ctx.moveTo(hx, hy);
+          const a = Math.PI / 2 + Math.sin(clock * 0.8 + i) * 0.5;
+          ctx.lineTo(hx + Math.cos(a - 0.15) * sh * 2, hy + Math.sin(a - 0.15) * sh * 2);
+          ctx.lineTo(hx + Math.cos(a + 0.15) * sh * 2, hy + Math.sin(a + 0.15) * sh * 2);
+          ctx.fill();
+          rrect(hx - 0.08, hy - 0.02, 0.16, 0.04, 0.02, '#20242e', false);
+          ellipse(hx, hy, 0.012, 0.012, '#ff3030', false);
+        }
+        // tracer fire
+        for (let i = 0; i < 3; i++) {
+          const k = (clock * 0.7 + i * 0.37) % 1;
+          const x0 = sx + sw * (0.1 + i * 0.3);
+          line(x0 + k * 0.6, sy + sh - k * sh * 0.8, x0 + k * 0.6 + 0.06, sy + sh - k * sh * 0.8 - 0.06, k < 0.6 ? '#7dd3ff' : 'rgba(0,0,0,0)', 0.006);
+        }
+        ctx.restore();
+        // concrete slit edges and sandbags
+        rrect(sx, sy - 0.06, sw, 0.06, 0, '#3b3532', false);
+        rrect(sx, sy + sh, sw, 0.06, 0, '#3b3532', false);
+        for (let x = -Wm; x < Wm * 2; x += 0.22) {
+          ctx.beginPath();
+          ctx.ellipse(x, floorY - 0.06, 0.12, 0.06, 0, 0, Math.PI * 2);
+          finish('#8a7a5a');
+        }
+        ctx.save();
+        ctx.font = `bold ${Math.min(0.07, Wm * 0.03)}px ui-monospace, Menlo, monospace`;
+        ctx.fillStyle = '#ffb33d';
+        ctx.fillText('RESISTANCE HQ · DESK DIVISION', Math.max(0.1, sx + Wm + 0.1), Math.max(0.15, sy - 0.12));
+        ctx.restore();
+        steelFloor('#2a201c', '#3b3532');
+      },
+    },
   };
 
   Object.assign(ROOMS, ROBOT_ROOMS);
@@ -6692,7 +7280,14 @@
   canvas.addEventListener('pointerdown', (e) => {
     sfx.unlock();
     if (cyborg) return;
-    if (robotWorld && state === 'flipped' && !grab) { shoot(e.clientX, e.clientY); return; }
+    if (robotWorld && state === 'flipped' && !grab) {
+      if (gunId === 'minigun') {
+        firing = { x: e.clientX, y: e.clientY };
+        try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      }
+      shoot(e.clientX, e.clientY);
+      return;
+    }
     if (state !== 'ready') return;
     if (onGameScreen(e.clientX, e.clientY)) { startCyborg(); return; }
     if (e.clientY < deskTopPx() - 30) return;  // swipes start at the desk, not above it
@@ -6700,6 +7295,7 @@
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (firing) { firing.x = e.clientX; firing.y = e.clientY; return; }
     if (!swipe) {
       canvas.style.cursor = state === 'ready' && (onHole(e.clientX, e.clientY) || onGameScreen(e.clientX, e.clientY)) ? 'pointer' : '';
       return;
@@ -6724,6 +7320,7 @@
     }
   });
   canvas.addEventListener('pointerup', (e) => {
+    firing = null;
     if (swipe && !grab && onHole(e.clientX, e.clientY) && Math.hypot(e.clientX - swipe.x0, e.clientY - swipe.y0) < 14) {
       swipe = null;
       enterHole();
@@ -6733,7 +7330,7 @@
     else tryFlip(e, 25);
     swipe = null;
   });
-  canvas.addEventListener('pointercancel', () => { releaseTilt(); swipe = null; });
+  canvas.addEventListener('pointercancel', () => { releaseTilt(); swipe = null; firing = null; });
   window.addEventListener('keydown', (e) => {
     sfx.unlock();
     if (!reportEl.hidden) {
