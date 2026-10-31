@@ -1909,6 +1909,7 @@
   calculator = named('Calculator', calculator);
   waterGlass = named('Glass of water', waterGlass);
   fishbowl = named('Fishbowl', fishbowl);
+  const firstMouseItem = ITEM_NAMES.length;
   cheeseWedge = named('Cheese wedge', cheeseWedge);
   cheeseWheel = named('Cheese wheel', cheeseWheel);
   swissBlock = named('Swiss cheese', swissBlock);
@@ -1922,6 +1923,7 @@
   matchbox = named('Matchbox', matchbox);
   peanut = named('Peanut', peanut);
   mousetrap = named('Mousetrap', mousetrap);
+  const MOUSE_ITEM_NAMES = ITEM_NAMES.slice(firstMouseItem);
 
   // Swag unlocks as the flip count grows; each new item is guaranteed a spot
   // on the next desk.
@@ -3808,6 +3810,8 @@
     } catch (e) { /* private mode */ }
   }
 
+  let wasLocked = false;
+
   function bankPoints(n) {
     if (n <= 0) return;
     cash += n;
@@ -3817,7 +3821,15 @@
 
   function showBank(bump) {
     shopBtn.querySelector('.n').textContent = short(cash);
-    shopBtn.querySelector('.boom').textContent = mouseWorld ? '\u{1F9C0}' : '\u{1F6D2}';
+    const locked = storeLock();
+    shopBtn.querySelector('.boom').textContent = locked ? '\u{1F512}' : mouseWorld ? '\u{1F9C0}' : '\u{1F6D2}';
+    if (wasLocked && !locked) {
+      toastEl.textContent = `The ${mouseWorld ? 'Mouse ' : ''}Armory is open!`;
+      toastEl.classList.remove('show');
+      void toastEl.offsetWidth;
+      toastEl.classList.add('show');
+    }
+    wasLocked = !!locked;
     if (bump) {
       shopBtn.classList.remove('bump');
       void shopBtn.offsetWidth;
@@ -3837,11 +3849,29 @@
     arsenalEl.classList.toggle('busy', state !== 'ready');
   }
 
+  // Each world's armory opens once 3/4 of that world's items have turned up.
+  const STORE_SHARE = 0.75;
+
+  function storeLock() {
+    if (TRY_ALL) return null;
+    const mouseNames = new Set(MOUSE_ITEM_NAMES);
+    const swagNames = new Set(UNLOCKS.map((u) => u.name));
+    const all = mouseWorld
+      ? MOUSE_ITEM_NAMES
+      : ['Desk', ...ITEM_NAMES.filter((n) => !swagNames.has(n) && !mouseNames.has(n)), ...swagNames];
+    const have = all.filter((name) => items[name] && items[name].flipped).length;
+    const need = Math.ceil(all.length * STORE_SHARE);
+    return have >= need ? null : { have, need, total: all.length };
+  }
+
   function openStore() {
+    const lock = storeLock();
     storeEl.querySelector('h2').textContent = mouseWorld ? 'Mouse Armory' : 'Armory';
-    storeEl.querySelector('.bank').textContent = mouseWorld
-      ? `You have ${cash.toLocaleString()} Mouse World points to spend. Points scored on this side of the wall go in this bank.`
-      : `You have ${cash.toLocaleString()} points to spend. Every point you score goes in the bank.`;
+    storeEl.querySelector('.bank').textContent = lock
+      ? `Locked until you\u2019ve discovered 3/4 of the ${mouseWorld ? 'Mouse World ' : ''}items: ${lock.have} of ${lock.total} found, ${lock.need - lock.have} more to go. Your ${cash.toLocaleString()} points are saving up in the meantime.`
+      : mouseWorld
+        ? `You have ${cash.toLocaleString()} Mouse World points to spend. Points scored on this side of the wall go in this bank.`
+        : `You have ${cash.toLocaleString()} points to spend. Every point you score goes in the bank.`;
     const list = storeEl.querySelector('ul');
     list.textContent = '';
     for (const w of arms()) {
@@ -3861,6 +3891,10 @@
         btn.textContent = 'Owned';
         btn.disabled = true;
         btn.className = 'owned';
+      } else if (lock) {
+        btn.textContent = '\u{1F512}';
+        btn.disabled = true;
+        btn.title = 'Discover more items to unlock the store';
       } else if (cash >= w.price) {
         btn.textContent = `Buy · ${short(w.price)}`;
         btn.addEventListener('click', () => {
@@ -4778,6 +4812,7 @@
   function finishRound() {
     awardHang();
     bankPoints(score);
+    showBank(false);
     if (score > best) {
       best = score;
       try { localStorage.setItem('flippydesk.best', String(best)); } catch (e) { /* storage blocked */ }
@@ -4878,7 +4913,7 @@
       }
     } else if (state === 'fadeout') {
       fade = Math.min(1, stateT / (portal ? 0.8 : FADE));
-      if (fade >= 1 && portal) { mouseWorld = portal.to; saveWorld(); loadBank(); showBank(false); }
+      if (fade >= 1 && portal) { mouseWorld = portal.to; saveWorld(); loadBank(); wasLocked = false; showBank(false); }
       if (fade >= 1) { buildScene(); state = 'fadein'; stateT = 0; updateScore(); }
     } else if (state === 'fadein') {
       fade = Math.max(0, 1 - stateT / (portal ? 0.8 : FADE));
@@ -5643,6 +5678,7 @@
     hole: () => enterHole(),
     get mouseWorld() { return mouseWorld; },
     get holeOpen() { return holeOpen(); },
+    get storeLock() { return storeLock(); },
     get cash() { return cash; },
     set cash(n) { cash = n; saveBank(); showBank(false); },
     get arms() { return armJoints.map((a) => [a.broken ? 1 : 0, Math.round(a.max || 0)]); },
