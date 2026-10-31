@@ -2160,6 +2160,7 @@
     stateT = 0;
     idleT = 0;
     flips++;
+    damageNow = {};
     try { localStorage.setItem('flippydesk.flips', String(flips)); } catch (e) { /* storage blocked */ }
     checkUnlock();
     score = 0;
@@ -2869,7 +2870,89 @@
 
   // ---------- score ----------
 
+  // ---------- damage report ----------
+  // Every breakage label maps to a line in the damage report. Counts are kept
+  // for this desk and for all time (in localStorage).
+
+  const DAMAGE = {
+    'screen smashed': 'Screens smashed',
+    'cracked': 'Screens cracked',
+    'PC fried': 'Computers fried',
+    'monitor snapped off': 'Monitors snapped off arms',
+    'clamp gave way': 'Monitor clamps broken',
+    'lamp smashed': 'Lamps smashed',
+    'mug smashed': 'Mugs smashed',
+    'pot smashed': 'Flower pots smashed',
+    'patent revoked': 'Patent awards shattered',
+    'snow globe smashed': 'Snow globes smashed',
+    'lava lamp popped': 'Lava lamps popped',
+    'zen disturbed': 'Zen gardens spilled',
+    'desk cracked': 'Desk cracks',
+    'drawer popped': 'Drawers popped out',
+  };
+  const damageBtn = document.getElementById('damage');
+  const reportEl = document.getElementById('report');
+  let damage = {};
+  let damageNow = {};
+  try { damage = JSON.parse(localStorage.getItem('flippydesk.broken')) || {}; } catch (e) { damage = {}; }
+
+  const damageTotal = (d) => Object.values(d).reduce((a, b) => a + b, 0);
+
+  function logDamage(label) {
+    damage[label] = (damage[label] || 0) + 1;
+    damageNow[label] = (damageNow[label] || 0) + 1;
+    try { localStorage.setItem('flippydesk.broken', JSON.stringify(damage)); } catch (e) { /* private mode */ }
+    showDamage(true);
+  }
+
+  function showDamage(bump) {
+    damageBtn.querySelector('.n').textContent = damageTotal(damage).toLocaleString();
+    if (bump) {
+      damageBtn.classList.remove('bump');
+      void damageBtn.offsetWidth;
+      damageBtn.classList.add('bump');
+    }
+  }
+
+  function openReport() {
+    const rows = Object.keys(DAMAGE)
+      .filter((k) => damage[k])
+      .sort((a, b) => damage[b] - damage[a]);
+    const body = reportEl.querySelector('tbody');
+    body.textContent = '';
+    for (const k of rows) {
+      const tr = document.createElement('tr');
+      const now = damageNow[k] || 0;
+      for (const [text, cls] of [[DAMAGE[k], ''], [now ? `+${now}` : '–', now ? 'now' : ''], [damage[k].toLocaleString(), '']]) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (cls) td.className = cls;
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+    const total = damageTotal(damage);
+    reportEl.querySelector('.total').textContent = total
+      ? `${total.toLocaleString()} things broken across ${flips.toLocaleString()} desk${flips === 1 ? '' : 's'} flipped`
+      : '';
+    reportEl.querySelector('table').hidden = !rows.length;
+    reportEl.querySelector('.empty').hidden = !!rows.length;
+    reportEl.hidden = false;
+    reportEl.querySelector('.close').focus();
+  }
+
+  function closeReport() {
+    reportEl.hidden = true;
+    damageBtn.focus();
+  }
+
+  damageBtn.addEventListener('click', openReport);
+  reportEl.querySelector('.close').addEventListener('click', closeReport);
+  reportEl.addEventListener('click', (e) => { if (e.target === reportEl) closeReport(); });
+  showDamage(false);
+
   function addPoints(n, label, x, y) {
+    if (DAMAGE[label]) logDamage(label);
     score += n;
     sfx.ding(n >= 500);
     popups.push({ x: clamp(x, 0.7, Wm - 0.7), y: Math.max(y, 1), text: `+${n} ${label}`, t: 0 });
@@ -3421,6 +3504,11 @@
   canvas.addEventListener('pointercancel', () => { releaseTilt(); swipe = null; });
   window.addEventListener('keydown', (e) => {
     sfx.unlock();
+    if (!reportEl.hidden) {
+      if (e.code === 'Escape') closeReport();
+      return;
+    }
+    if (e.target.closest && e.target.closest('button')) return;
     if (e.code === 'Space' || e.code === 'ArrowUp') {
       e.preventDefault();
       flip(rand(1, 1.8), chance(0.5) ? 1 : -1, rand(-0.4, 0.4));
