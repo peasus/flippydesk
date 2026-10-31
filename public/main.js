@@ -2059,6 +2059,7 @@
     armJoints = [];
     weapon = null;
     weaponRound = false;
+    clawMarks = null;
     flames = [];
     booms = [];
     rings = [];
@@ -3196,6 +3197,26 @@
         if (!ready()) return;
         tone('square', fast ? 2093 : 1760, 0.1, fast ? 0.05 : 0.12);
       },
+      // A spoon catapult letting go.
+      twang() {
+        if (!ready()) return;
+        tone('triangle', 220, 0.25, 0.25, 0, 110);
+        burst('lowpass', 900, 1, 0.3, 0.06);
+      },
+      // Termites at work: dry little crunches.
+      chew() {
+        if (!ready()) return;
+        for (let i = 0; i < 3; i++) burst('bandpass', rand(2500, 4500), 3, 0.12, 0.025, i * rand(0.03, 0.06));
+      },
+      pour(dur) {
+        if (!ready()) return;
+        rumble(1800, 900, 0.35, dur, 0, 'bandpass');
+        rumble(500, 300, 0.25, dur + 2);
+      },
+      gurgle() {
+        if (!ready()) return;
+        for (let i = 0; i < 12; i++) tone('sine', rand(180, 420), 0.18, 0.12, i * rand(0.12, 0.25), rand(500, 900));
+      },
       // The big one: a crack, then a roar that rolls on for seconds.
       nuke() {
         if (!ready()) return;
@@ -3647,7 +3668,9 @@
     'fan busted': 'Desk fans busted',
     'cheese crumbled': 'Cheeses crumbled',
     'desk cleaved': 'Desks cleaved',
-    'desk skewered': 'Desks skewered',
+    'desk devoured': 'Desks eaten by termites',
+    'cat-astrophe!': 'Desks swatted by the cat',
+    'shorted out': 'Things shorted out',
     'desk blown up': 'Desks blown up',
     'desk incinerated': 'Desks incinerated',
     'torched': 'Things torched',
@@ -3774,10 +3797,10 @@
     { id: 'nuke', name: 'Tactical nuke', icon: '☢️', price: 150000, blurb: 'Slid under the desk. It beeps. Then it doesn’t.' },
   ];
   const MOUSE_WEAPONS = [
-    { id: 'sword', name: 'Sewing needle', icon: '\u{1FAA1}', price: 10000, blurb: 'En garde! One mighty slash and the desk comes apart in two.' },
-    { id: 'grenade', name: 'Firecracker', icon: '\u{1F9E8}', price: 30000, blurb: 'Light the fuse, toss it on the desk, cover your ears.' },
-    { id: 'laser', name: 'Magnifying glass', icon: '\u{1F50D}', price: 75000, blurb: 'Focus the sun into one very hot beam. The desk goes up in flames.' },
-    { id: 'nuke', name: 'The Big Cheese', icon: '\u{1F9C0}', price: 150000, blurb: 'A wheel of dangerously aged cheese. It beeps. Then it doesn\u2019t.' },
+    { id: 'catapult', name: 'Cheese catapult', icon: '\u{1F944}', price: 10000, blurb: 'A spoon, a pencil and six wheels of gouda, fired at everything on the desk.' },
+    { id: 'termites', name: 'Termite swarm', icon: '\u{1F41C}', price: 30000, blurb: 'They pour out of the hole and eat the desk down to sawdust.' },
+    { id: 'paw', name: 'The cat', icon: '\u{1F43E}', price: 75000, blurb: 'Risky. One giant paw swats the whole desk across the room.' },
+    { id: 'flood', name: 'The Flood', icon: '\u{1F30A}', price: 150000, blurb: 'Someone left the tap on. Everything floats. The computers do not survive.' },
   ];
   const arms = () => (mouseWorld ? MOUSE_WEAPONS : WEAPONS);
   const TRY_ALL = /[?&]armory\b/.test(location.search);
@@ -3789,6 +3812,9 @@
   function loadBank() {
     try { cash = parseInt(localStorage.getItem(bankKey('cash')), 10) || 0; } catch (e) { cash = 0; }
     try { owned = JSON.parse(localStorage.getItem(bankKey('owned'))) || []; } catch (e) { owned = []; }
+    // The first mouse arsenal was a reskin; carry purchases over to the new weapons.
+    const MOVED = { sword: 'catapult', grenade: 'termites', laser: 'paw', nuke: 'flood' };
+    if (mouseWorld) owned = owned.map((id) => MOVED[id] || id);
   }
   loadBank();
   let weaponRound = false;
@@ -4180,6 +4206,380 @@
 
   // ----- using a weapon -----
 
+  // ----- mouse world weapons -----
+  // The mice fight with what they have: a spoon catapult, termites, a very
+  // large cat and the kitchen tap.
+
+  const MOUSE_IDS = new Set(['catapult', 'termites', 'paw', 'flood']);
+  const SAWDUST = { color: '#d9b07a', stain: 'rgba(217,176,122,0.9)' };
+  let clawMarks = null;   // screen-space slashes after the cat swats, { start, dir }
+
+  // Things that started on the desk (not the desk itself, not ammo).
+  const loose = () => bodies.filter((b) => b.kind !== 'desk' && b.kind !== 'cheeseball' && b.item);
+
+  function setupMouseWeapon(w) {
+    if (w.id === 'catapult') {
+      w.side = desk.getPosition().x > Wm / 2 ? -1 : 1;
+      w.cx = w.side < 0 ? 0.32 : Wm - 0.32;
+      // On narrow screens there's no room beside the desk, so it stands on a
+      // stack of matchboxes to fire over the top.
+      w.by = Math.min(cx - DESK_W / 2, Wm - cx - DESK_W / 2) < 0.5 ? floorY - DESK_H - 0.02 : floorY;
+      w.balls = [];
+      w.shots = 0;
+      w.arm = -1.1;
+    } else if (w.id === 'termites') {
+      w.bugs = Array.from({ length: 140 }, (_, i) => ({
+        x: holeX() + rand(-0.05, 0.05), y: floorY - rand(0, 0.08),
+        delay: i * 0.008, lx: rand(-DESK_W / 2 + 0.05, DESK_W / 2 - 0.05), ly: rand(-DESK_H, -0.05),
+        a: 0, falling: false, vx: 0, vy: 0,
+      }));
+      w.eaten = 0;
+    } else if (w.id === 'paw') {
+      w.dir = desk.getPosition().x > Wm / 2 ? -1 : 1;
+      w.edge = w.dir > 0 ? -0.2 : Wm + 0.2;
+      w.py = floorY - DESK_H - 0.22;
+      sfx.meow();
+    } else if (w.id === 'flood') {
+      w.level = floorY + 0.4;
+      w.top = floorY - DESK_H - 0.75;
+      w.soaked = new Set();
+      w.bubbles = [];
+      w.tapX = Math.max(0.35, cx - DESK_W / 2 + 0.25);
+      sfx.pour(3.6);
+    }
+  }
+
+  function updateMouseWeapon(w, dt) {
+    if (w.id === 'catapult') {
+      // six quick shots, each aimed at something still on the desk
+      const SHOT = 0.42;
+      if (w.t > 0.5 && w.shots < 6 && w.t > 0.5 + w.shots * SHOT) {
+        w.shots++;
+        w.arm = 0.35;
+        const ox = w.cx + w.side * 0.12, oy = w.by - 0.42;
+        const onDesk = loose().filter((b) => b.getWorldCenter().y < floorY - DESK_H + 0.05);
+        const target = onDesk.length ? pick(onDesk).getWorldCenter() : desk.getWorldPoint(V(rand(-0.6, 0.6), -DESK_H - 0.1));
+        const T = 0.55;
+        const vx = (target.x - ox) / T;
+        const vy = (target.y - oy) / T - 0.5 * GRAVITY * T;
+        const r = 0.07;
+        const wax = pick(['#d94a4a', '#e0b84a', CHEESE]);
+        const ball = addBody(ox, oy, [{ x: 0, y: 0, r }], () => {
+          ellipse(0, 0, r, r, wax);
+          ellipse(0, 0, r * 0.55, r * 0.55, CHEESE, false);
+          ellipse(-r * 0.15, -r * 0.1, r * 0.12, r * 0.12, CHEESE_RIND, false);
+        }, { kind: 'cheeseball', density: 14, bullet: true, item: null, z: 3 });
+        ball.setLinearVelocity(V(vx, vy));
+        ball.setAngularVelocity(rand(-15, 15));
+        w.balls.push({ ball, at: w.t + T });
+        bodies.sort((a, b) => a.z - b.z);
+        sfx.twang();
+      }
+      w.arm = Math.max(-1.1, w.arm - dt * 4.5);
+      // each wheel lands with a wallop that scatters whatever it hits
+      for (const s of w.balls) {
+        if (s.done || w.t < s.at) continue;
+        s.done = true;
+        const a = s.ball.getWorldCenter();
+        blast(a.x, a.y, 2.2, 0.3);
+        sparkBurst(a.x, a.y, 12);
+        sfx.thud(1, 0.5);
+        shake = Math.max(shake, 0.5);
+      }
+      if (w.t > 0.5 + 6 * SHOT + 1.6 && !w.fired) {
+        w.fired = true;
+        const off = loose().filter((b) => b.getWorldCenter().y > floorY - 0.4).length;
+        if (off) addPoints(off * 100, `${off} knocked off`, desk.getPosition().x, floorY - DESK_H - 0.4);
+        w.done = true;
+      }
+    } else if (w.id === 'termites') {
+      const EAT = 1.6, SPLIT = 3.6;
+      for (const g of w.bugs) {
+        if (g.falling) {
+          g.vy += GRAVITY * dt;
+          g.x += g.vx * dt;
+          g.y = Math.min(floorY, g.y + g.vy * dt);
+          continue;
+        }
+        if (w.t < g.delay) continue;
+        const p = w.fired ? null : desk.getWorldPoint(V(g.lx, g.ly));
+        if (!p) continue;
+        const dx = p.x - g.x, dy = p.y - g.y, d = Math.hypot(dx, dy);
+        const sp = 1.6 * dt;
+        if (d > sp) { g.x += (dx / d) * sp; g.y += (dy / d) * sp; g.a = Math.atan2(dy, dx); }
+        else { g.x = p.x + rand(-0.006, 0.006); g.y = p.y + rand(-0.006, 0.006); g.a += rand(-1, 1); }
+      }
+      if (w.t > EAT && !w.fired) {
+        desk.char = Math.min(0.45, (desk.char || 0) + dt * 0.2);
+        if (chance(dt * 30)) {
+          const g = pick(w.bugs);
+          drops.push(Object.assign({ x: g.x, y: g.y, vx: rand(-0.6, 0.6), vy: rand(-0.8, 0), r: rand(0.004, 0.009) }, SAWDUST));
+        }
+        if (chance(dt * 8)) sfx.chew();
+        shake = Math.max(shake, 0.05);
+      }
+      if (w.t >= SPLIT && !w.fired) {
+        w.fired = true;
+        const xs = [-5, -0.7, -0.4, -0.1, 0.2, 0.5, 0.75, 5];
+        const ys = [-3, -DESK_H + DESK_TOP_T, -0.4, 1];
+        const regions = [];
+        for (let i = 0; i < xs.length - 1; i++) {
+          for (let k = 0; k < ys.length - 1; k++) {
+            const x0 = xs[i] + rand(-0.04, 0.04), x1 = xs[i + 1];
+            regions.push([[x0, ys[k]], [x1, ys[k]], [x1, ys[k + 1]], [x0, ys[k + 1]]]);
+          }
+        }
+        const pieces = splitDesk(regions, []);
+        for (const p of pieces) {
+          p.char = desk.char || 0.4;
+          p.setLinearVelocity(V(rand(-0.8, 0.8), rand(-1.2, 0)));
+          p.setAngularVelocity(rand(-3, 3));
+        }
+        w.crumbs = pieces.filter((p) => p !== desk);
+        for (const g of w.bugs) { g.falling = true; g.vx = rand(-1, 1); g.vy = rand(-1.5, 0); }
+        for (const b of loose()) b.setAwake(true);
+        sfx.smash();
+        shake = 0.8;
+      }
+      // then the chunks crumble away to sawdust, one by one
+      if (w.fired && w.crumbs && w.crumbs.length && w.t > SPLIT + 0.9 && chance(dt * 9)) {
+        const p = w.crumbs.splice(randInt(0, w.crumbs.length - 1), 1)[0];
+        const c = p.getWorldCenter();
+        for (let i = 0; i < 16; i++) drops.push(Object.assign({ x: c.x + rand(-0.06, 0.06), y: c.y + rand(-0.06, 0.06), vx: rand(-1, 1), vy: rand(-1.5, 0), r: rand(0.005, 0.012) }, SAWDUST));
+        world.destroyBody(p);
+        bodies.splice(bodies.indexOf(p), 1);
+        w.eaten++;
+        sfx.chew();
+      }
+      if (w.fired && !w.scored && w.crumbs && !w.crumbs.length) {
+        w.scored = true;
+        addPoints(1200 + w.eaten * 50, 'desk devoured', desk.getPosition().x, floorY - 0.9);
+      }
+      if (w.scored && w.t > SPLIT + 3) w.done = true;
+    } else if (w.id === 'paw') {
+      // peek in, swipe across, pull back
+      const peek = w.edge + w.dir * 0.45;
+      const far = cx + w.dir * (DESK_W / 2 + 0.6);
+      if (w.t < 0.55) w.px = w.edge + (peek - w.edge) * Math.min(1, w.t / 0.35);
+      else if (w.t < 0.8) { const k = (w.t - 0.55) / 0.25; w.px = peek + (far - peek) * k * k; }
+      else w.px = far + (w.edge - w.dir * 0.6 - far) * Math.min(1, (w.t - 0.8) / 0.8);
+      w.claws = w.t > 0.4 && w.t < 1;
+      if (!w.fired && w.t >= 0.68) {
+        w.fired = true;
+        for (const b of bodies) {
+          const c = b.getWorldCenter();
+          const lift = c.y < floorY - DESK_H + 0.1 ? 1 : 0.6;
+          b.setLinearVelocity(V(w.dir * rand(6, 9) * lift, -rand(2.5, 4.5)));
+          b.setAngularVelocity(w.dir * rand(4, 10));
+          b.setAwake(true);
+          if (b.breakable && b.breakable !== 'desk') b.hit = Math.max(b.hit || 0, 6);
+        }
+        desk.setLinearVelocity(V(w.dir * 7, -4.5));
+        desk.setAngularVelocity(w.dir * 5);
+        // three claw scratches across the desktop
+        const lx = desk.getLocalPoint(V(w.px, w.py)).x;
+        for (let i = -1; i <= 1; i++) {
+          const x0 = clamp(lx - w.dir * 0.5 + i * 0.12, -0.95, 0.95);
+          desk.splits.push([[x0, -DESK_H + 0.005], [clamp(x0 + w.dir * 0.4, -0.97, 0.97), -DESK_H + DESK_TOP_T - 0.005]]);
+        }
+        clawMarks = { start: clock, dir: w.dir };
+        sfx.whoosh(2.5);
+        sfx.smash();
+        shake = 1.3;
+        addPoints(800, 'cat-astrophe!', cx, floorY - DESK_H - 0.5);
+      }
+      if (w.t > 2) w.done = true;
+    } else if (w.id === 'flood') {
+      const FILL = 3.6, DRAIN = 8.5, END = 11.5;
+      const full = w.top;
+      if (w.t < FILL) w.level = floorY + 0.4 + (full - floorY - 0.4) * Math.min(1, w.t / FILL);
+      else if (w.t > DRAIN) w.level = full + (floorY + 0.4 - full) * Math.min(1, (w.t - DRAIN) / 2.5);
+      if (!w.drained && w.t > DRAIN) { w.drained = true; sfx.gurgle(); }
+      for (const b of bodies) {
+        const c = b.getWorldCenter();
+        const sub = clamp((c.y - w.level) / 0.15, 0, 1);
+        if (!sub) continue;
+        const v = b.getLinearVelocity();
+        const drift = Math.sin(clock * 1.3 + c.x * 2) * 0.6;
+        b.setLinearVelocity(V((v.x + drift * dt) * (1 - 1.8 * dt * sub), (v.y - GRAVITY * 1.45 * dt * sub) * (1 - 2.2 * dt * sub)));
+        b.setAngularVelocity(b.getAngularVelocity() * (1 - 1.5 * dt * sub) + rand(-0.4, 0.4) * dt);
+        b.setAwake(true);
+        if (sub > 0.5 && b.item && b.kind !== 'desk' && !w.soaked.has(b)) w.soaked.add(b);
+        if (sub > 0.5 && (b.screen || b.breakable === 'tower') && !b.shorted) {
+          b.shorted = true;
+          if (b.screen) b.dead = true;
+          sparkBurst(c.x, c.y, 30);
+          sfx.zap();
+          addPoints(500, 'shorted out', c.x, c.y);
+        }
+        if (chance(dt * 3 * sub)) w.bubbles.push({ x: c.x + rand(-0.05, 0.05), y: c.y, r: rand(0.01, 0.025), t: 0 });
+      }
+      for (const bb of w.bubbles) { bb.t += dt; bb.y -= 0.5 * dt; bb.x += Math.sin(bb.t * 8) * 0.002; }
+      w.bubbles = w.bubbles.filter((bb) => bb.y > w.level);
+      if (!w.scored && w.t > DRAIN) {
+        w.scored = true;
+        const n = w.soaked.size;
+        addPoints(1500 + n * 100, `${n} things soaked`, cx, floorY - 1.2);
+      }
+      if (w.t >= END && state === 'flipped') {
+        w.done = true;
+        state = 'fadeout';
+        stateT = 0;
+        finishRound();
+      }
+    }
+  }
+
+  function drawCatapult(w) {
+    ctx.save();
+    for (let y = floorY, i = 0; y > w.by + 0.01; y -= 0.13, i++) {
+      rrect(w.cx - 0.15, Math.max(w.by, y - 0.13), 0.3, Math.min(0.13, y - w.by), 0.01, i % 2 ? '#3d6bb3' : '#d94a4a');
+      rrect(w.cx - 0.15, Math.max(w.by, y - 0.13), 0.3, 0.02, 0.005, '#6b4a33', false);
+    }
+    ctx.translate(w.cx, w.by);
+    ctx.scale(w.side, 1);
+    // a block of wood, a pencil pivot and a spoon
+    rrect(-0.16, -0.1, 0.32, 0.1, 0.02, '#a0703f');
+    poly([[-0.06, -0.1], [0.06, -0.1], [0, -0.22]], '#8a5a3b');
+    ctx.translate(0, -0.21);
+    ctx.rotate(-w.arm);
+    rrect(-0.32, -0.018, 0.4, 0.036, 0.018, '#c9ccd3');
+    ellipse(-0.33, -0.03, 0.07, 0.04, '#c9ccd3');
+    if (w.arm < -0.9 && w.shots < 6) ellipse(-0.33, -0.08, 0.05, 0.05, CHEESE);
+    ctx.restore();
+  }
+
+  function drawTermites(w) {
+    for (const g of w.bugs) {
+      if (w.t < g.delay) continue;
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate(g.a);
+      const wig = Math.sin(clock * 30 + g.delay * 100) * 0.004;
+      line(-0.008, -0.008 + wig, 0.008, 0.008 - wig, INK, 0.003);
+      line(-0.008, 0.008 - wig, 0.008, -0.008 + wig, INK, 0.003);
+      ellipse(0, 0, 0.012, 0.006, '#f2e2c0', false);
+      ellipse(0.012, 0, 0.006, 0.005, '#8a5a3b', false);
+      ctx.restore();
+    }
+  }
+
+  function drawPaw(w) {
+    if (w.px == null) return;
+    const y = w.py;
+    const shoulder = w.edge - w.dir * 0.8;
+    ctx.save();
+    ctx.lineCap = 'round';
+    // the arm, striped
+    for (const [wd, col] of [[0.44, INK], [0.42, '#f0a35a']]) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = wd;
+      ctx.beginPath();
+      ctx.moveTo(shoulder, y - 0.35);
+      ctx.lineTo(w.px - w.dir * 0.15, y);
+      ctx.stroke();
+    }
+    for (let k = 0.25; k < 0.9; k += 0.18) {
+      const ax = shoulder + (w.px - w.dir * 0.15 - shoulder) * k;
+      const ay = y - 0.35 + 0.35 * k;
+      line(ax, ay - 0.2, ax + w.dir * 0.05, ay - 0.08, '#c96b3c', 0.035);
+    }
+    // the paw, with claws out mid-swipe
+    if (w.claws) {
+      for (let i = 0; i < 4; i++) {
+        const cy = y - 0.18 + i * 0.12;
+        poly([[w.px + w.dir * 0.2, cy - 0.025], [w.px + w.dir * 0.36, cy + 0.01], [w.px + w.dir * 0.2, cy + 0.03]], '#fffaf0');
+      }
+    }
+    ellipse(w.px, y, 0.28, 0.26, '#f0a35a');
+    for (let i = 0; i < 4; i++) ellipse(w.px + w.dir * 0.17, y - 0.18 + i * 0.12, 0.07, 0.055, '#f0a35a');
+    ellipse(w.px - w.dir * 0.02, y + 0.03, 0.1, 0.09, '#f2a7b5');
+    ctx.restore();
+  }
+
+  function drawFlood(w) {
+    // the tap, pouring until the room is full
+    const tx = w.tapX;
+    rrect(tx - 0.06, -0.1, 0.12, 0.35, 0.02, '#c9ccd3');
+    rrect(tx - 0.06, 0.2, 0.3, 0.1, 0.04, '#c9ccd3');
+    rrect(tx + 0.17, 0.26, 0.08, 0.08, 0.02, '#b0b4bd');
+    rrect(tx - 0.12, 0.02, 0.24, 0.06, 0.03, '#e66b6b');
+    if (w.t < 3.6) {
+      const sx = tx + 0.21;
+      ctx.fillStyle = 'rgba(120,190,240,0.85)';
+      ctx.fillRect(sx - 0.035 + Math.sin(clock * 20) * 0.005, 0.32, 0.07, w.level - 0.32);
+      for (let i = 0; i < 3; i++) ellipse(sx + rand(-0.12, 0.12), w.level - rand(0, 0.08), 0.02, 0.02, 'rgba(255,255,255,0.8)', false);
+    }
+    // the water, in front of everything
+    ctx.fillStyle = 'rgba(70,150,215,0.42)';
+    ctx.beginPath();
+    ctx.moveTo(0, Hm + 1);
+    for (let x = 0; x <= Wm + 0.05; x += 0.05) ctx.lineTo(x, w.level + Math.sin(x * 4 + clock * 3) * 0.02);
+    ctx.lineTo(Wm, Hm + 1);
+    ctx.fill();
+    ctx.beginPath();
+    for (let x = 0; x <= Wm + 0.05; x += 0.05) ctx.lineTo(x, w.level + Math.sin(x * 4 + clock * 3) * 0.02);
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = 0.02;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 0.005;
+    for (const bb of w.bubbles) {
+      ctx.beginPath();
+      ctx.arc(bb.x, bb.y, bb.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // a mouse sails by in a walnut shell
+    if (w.t > 2.5 && w.level < floorY - 0.2) {
+      const bx = ((w.t - 2.5) * 0.35) % (Wm + 0.6) - 0.3;
+      const by = w.level + Math.sin(clock * 3 + bx * 4) * 0.02;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(Math.sin(clock * 2) * 0.12);
+      ctx.save();
+      ctx.scale(0.3, 0.3);
+      drawMouseHead(0, -0.35, '#9a9aa6', { twitch: true });
+      ctx.restore();
+      ctx.beginPath();
+      ctx.ellipse(0, -0.02, 0.13, 0.07, 0, 0, Math.PI);
+      ctx.closePath();
+      finish('#8a5a3b');
+      line(0.06, -0.03, 0.06, -0.22, '#5b3a2a', 0.008);
+      poly([[0.065, -0.21], [0.15, -0.12], [0.065, -0.1]], '#fffaf0');
+      ctx.restore();
+    }
+  }
+
+  function drawMouseWeapon(w) {
+    if (w.id === 'catapult') drawCatapult(w);
+    else if (w.id === 'termites') drawTermites(w);
+    else if (w.id === 'paw') drawPaw(w);
+    else if (w.id === 'flood') drawFlood(w);
+  }
+
+  // Three claw slashes across the screen.
+  function drawClawMarks() {
+    if (!clawMarks) return;
+    const k = clock - clawMarks.start;
+    if (k > 1.4) { clawMarks = null; return; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const a = Math.min(1, k * 8) * Math.max(0, 1 - (k - 0.6) / 0.8);
+    const grow = Math.min(1, k * 6);
+    ctx.lineCap = 'round';
+    for (let i = -1; i <= 1; i++) {
+      const x0 = W / 2 - clawMarks.dir * W * 0.3 + i * W * 0.07, y0 = H * 0.2 + i * H * 0.03;
+      const x1 = x0 + clawMarks.dir * W * 0.45 * grow, y1 = y0 + H * 0.5 * grow;
+      for (const [wd, col] of [[16, `rgba(120,20,30,${0.5 * a})`], [7, `rgba(255,240,240,${0.9 * a})`]]) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = wd;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+      }
+    }
+  }
+
   function useWeapon(id) {
     if (state !== 'ready' || weapon || !has(id)) return;
     releaseTilt();
@@ -4188,7 +4588,9 @@
     landed = true;   // weapons don't earn hang time
     const top = desk.getWorldPoint(V(0, -DESK_H));
     weapon = { id, t: 0, x: top.x, y: top.y, fired: false, done: false };
-    if (id === 'sword') {
+    if (MOUSE_IDS.has(id)) {
+      setupMouseWeapon(weapon);
+    } else if (id === 'sword') {
       weapon.xt = rand(-0.12, 0.12);
       weapon.xb = weapon.xt + rand(-0.15, 0.15);
       sfx.whoosh(2.2);
@@ -4219,6 +4621,7 @@
     const w = weapon;
     w.t += dt;
     if (!w.done) heldUntil = stateT;
+    if (MOUSE_IDS.has(w.id)) return updateMouseWeapon(w, dt);
     if (w.id === 'sword') {
       if (!w.fired && w.t >= 0.3) {
         w.fired = true;
@@ -4240,7 +4643,7 @@
         sparkBurst(w.x, w.y, 40);
         sfx.clang();
         shake = 1;
-        addPoints(500, mouseWorld ? 'desk skewered' : 'desk cleaved', w.x, w.y - 0.3);
+        addPoints(500, 'desk cleaved', w.x, w.y - 0.3);
       }
       if (w.t > 1.2) w.done = true;
     } else if (w.id === 'grenade') {
@@ -4367,11 +4770,6 @@
       ctx.stroke();
     }
     ctx.rotate(a);
-    if (mouseWorld) {
-      drawNeedle(L);
-      ctx.restore();
-      return;
-    }
     // grip, pommel, crossguard
     rrect(-0.36, -0.035, 0.34, 0.07, 0.02, '#5b3a2a');
     for (let i = 0; i < 5; i++) line(-0.33 + i * 0.065, -0.035, -0.3 + i * 0.065, 0.035, '#3b2416', 0.01);
@@ -4389,30 +4787,7 @@
     ctx.restore();
   }
 
-  // A giant sewing needle trailing red thread, held at the eye end.
-  function drawNeedle(L) {
-    ctx.beginPath();
-    ctx.moveTo(0.06, 0);
-    ctx.bezierCurveTo(-0.2, 0.05, -0.25, 0.3, -0.5, 0.2 + Math.sin(clock * 6) * 0.04);
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 0.034;
-    ctx.stroke();
-    ctx.strokeStyle = '#e04a55';
-    ctx.lineWidth = 0.018;
-    ctx.stroke();
-    const g = ctx.createLinearGradient(0, -0.035, 0, 0.035);
-    g.addColorStop(0, '#f4f6fa');
-    g.addColorStop(0.5, '#c4ccd8');
-    g.addColorStop(1, '#8a94a3');
-    poly([[-0.03, -0.035], [L - 0.35, -0.028], [L, 0], [L - 0.35, 0.028], [-0.03, 0.035]], g);
-    ellipse(-0.03, 0, 0.035, 0.035, '#c4ccd8');
-    ellipse(0.06, 0, 0.05, 0.012, '#4a4f5c', false);
-    line(0.14, -0.015, L - 0.4, -0.012, 'rgba(255,255,255,0.85)', 0.008);
-  }
-
   function drawGrenade(x, y, spin, blink) {
-    if (mouseWorld) return drawFirecracker(x, y, spin, blink);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(spin);
@@ -4421,31 +4796,6 @@
     rrect(-0.02, -0.095, 0.04, 0.03, 0.006, '#9aa0aa');
     poly([[0.015, -0.09], [0.06, -0.075], [0.055, -0.02], [0.04, -0.02], [0.045, -0.07]], '#9aa0aa');
     if (blink) ellipse(0, 0.02, 0.012, 0.012, '#ff3b3b', false);
-    ctx.restore();
-  }
-
-  // A red firecracker with a fizzing fuse.
-  function drawFirecracker(x, y, spin, lit) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(spin);
-    rrect(-0.03, -0.085, 0.06, 0.17, 0.012, '#d94a4a');
-    rrect(-0.03, -0.085, 0.06, 0.02, 0.006, '#e0b84a');
-    rrect(-0.03, 0.065, 0.06, 0.02, 0.006, '#e0b84a');
-    label('\u7206', 0, 0.012, 0.04, '#ffd84d');
-    ctx.beginPath();
-    ctx.moveTo(0, -0.085);
-    ctx.quadraticCurveTo(0.02, -0.12, 0.005, -0.15);
-    ctx.strokeStyle = '#5b3a2a';
-    ctx.lineWidth = 0.008;
-    ctx.stroke();
-    if (lit || weapon) {
-      ctx.globalCompositeOperation = 'lighter';
-      for (let i = 0; i < 6; i++) {
-        const a = Math.random() * Math.PI * 2, r = Math.random() * 0.04;
-        ellipse(0.005 + Math.cos(a) * r, -0.15 + Math.sin(a) * r, 0.006, 0.006, i % 2 ? '#fff1a8' : '#ffb33d', false);
-      }
-    }
     ctx.restore();
   }
 
@@ -4464,19 +4814,6 @@
     }
     ctx.save();
     ctx.translate(bx, by);
-    if (mouseWorld) {
-      // a magnifying glass bending sunlight into a hot spot
-      ctx.rotate(ang);
-      rrect(-0.32, -0.04, 0.32, 0.08, 0.04, '#8a5a3b');
-      rrect(-0.02, -0.03, 0.08, 0.06, 0.01, '#c9ccd3');
-      ellipse(0.28, 0, 0.22, 0.22, '#c9a64a');
-      ellipse(0.28, 0, 0.19, 0.19, 'rgba(200,235,255,0.55)', false);
-      ellipse(0.22, -0.07, 0.05, 0.03, 'rgba(255,255,255,0.7)', false);
-      const charge = w.t < 0.85 ? w.t / 0.85 : w.hitP ? 1 : 0.3;
-      ctx.globalCompositeOperation = 'lighter';
-      ellipse(0.5, 0, 0.03 + charge * 0.05, 0.03 + charge * 0.05, `rgba(255,230,120,${0.4 + charge * 0.5})`, false);
-      ctx.restore();
-    } else {
     // mount
     rrect(-0.16 * w.side - 0.12, -0.12, 0.24, 0.24, 0.05, '#3b3a44');
     ctx.rotate(ang);
@@ -4497,17 +4834,13 @@
       }
     }
     ctx.restore();
-    }
     if (w.hitP) {
       const mx = bx + Math.cos(ang) * 0.5, my = by + Math.sin(ang) * 0.5;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
       const wob = 1 + Math.random() * 0.3;
-      const beam = mouseWorld
-        ? [[0.16 * wob, 'rgba(255,220,90,0.22)'], [0.07 * wob, 'rgba(255,200,80,0.5)'], [0.025, 'rgba(255,252,230,1)']]
-        : [[0.14 * wob, 'rgba(255,40,80,0.25)'], [0.07 * wob, 'rgba(255,60,90,0.6)'], [0.025, 'rgba(255,245,245,1)']];
-      for (const [wd, col] of beam) {
+      for (const [wd, col] of [[0.14 * wob, 'rgba(255,40,80,0.25)'], [0.07 * wob, 'rgba(255,60,90,0.6)'], [0.025, 'rgba(255,245,245,1)']]) {
         ctx.strokeStyle = col;
         ctx.lineWidth = wd;
         ctx.beginPath();
@@ -4527,21 +4860,12 @@
     const y = floorY - (1 - drop * drop) * 2.5;
     ctx.save();
     ctx.translate(w.bx, y);
-    if (mouseWorld) {
-      // a whole wheel of cheese, wired up
-      rrect(-0.28, -0.2, 0.52, 0.2, 0.05, CHEESE_RIND);
-      ellipse(-0.02, -0.2, 0.26, 0.05, CHEESE);
-      cheeseHoles(-0.26, -0.17, 0.48, 0.15, 5, 1.4);
-      line(0.2, -0.2, 0.24, -0.3, '#e66b6b', 0.008);
-      line(0.16, -0.2, 0.2, -0.29, '#6b8fe6', 0.008);
-    } else {
     // fins, body, nose
     poly([[-0.24, 0], [-0.3, -0.08], [-0.2, -0.08]], '#3b3a44');
     rrect(-0.26, -0.2, 0.46, 0.2, 0.1, '#4a5a3a');
     ellipse(0.2, -0.1, 0.07, 0.1, '#4a5a3a');
     rrect(-0.15, -0.2, 0.025, 0.2, 0, '#e0b84a', false);
     rrect(0.08, -0.2, 0.025, 0.2, 0, '#e0b84a', false);
-    }
     // radiation symbol
     ellipse(-0.03, -0.1, 0.06, 0.06, '#f2c94e');
     ctx.fillStyle = '#1d1c22';
@@ -4579,10 +4903,12 @@
       drawGrenade(x, y, k < 1 ? w.t * 14 : 0.3, blink);
     } else if (w.id === 'laser') drawLaser(w);
     else if (w.id === 'nuke') drawNukeBomb(w);
+    else drawMouseWeapon(w);
   }
 
   // Screen-space overlays: flashes, and the nuke's wide shot.
   function drawWeaponScreen() {
+    drawClawMarks();
     const w = weapon;
     if (!w) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -4725,29 +5051,13 @@
         }
       }
     }
-    if (mouseWorld) {
-      // the cloud is Swiss
-      ctx.save();
-      ctx.globalCompositeOperation = 'color';
-      ctx.fillStyle = 'rgba(255,205,40,0.9)';
-      ctx.beginPath();
-      ctx.ellipse(W / 2, capY - R * 0.2, R * 1.45, R * 0.95, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      ctx.fillStyle = 'rgba(110,65,15,0.6)';
-      for (const [u, v, r] of [[-0.6, -0.3, 0.14], [0.2, -0.6, 0.1], [0.55, 0.05, 0.12], [-0.15, 0.1, 0.09], [0.85, -0.35, 0.07], [-0.9, 0.05, 0.08]]) {
-        ctx.beginPath();
-        ctx.ellipse(W / 2 + u * R, capY + v * R, r * R, r * R * 0.85, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
     ctx.restore();
     if (t > 3) {
       ctx.globalAlpha = Math.min(1, (t - 3) / 1);
       ctx.fillStyle = '#fff6e0';
       ctx.font = `700 ${Math.round(Math.min(22, W / 22))}px ui-rounded, system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(mouseWorld ? 'Gouda-bye, desk.' : 'The desk has been decommissioned.', W / 2, H * 0.9);
+      ctx.fillText('The desk has been decommissioned.', W / 2, H * 0.9);
       ctx.textAlign = 'start';
       ctx.globalAlpha = 1;
     }
