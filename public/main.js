@@ -3034,8 +3034,9 @@
   function launch(strength, side, sideways) {
     // In the robot world the desk goes way up, for target practice, while
     // the things on it scatter about as usual.
-    const scatter = robotWorld ? strength * 1.2 : strength;
-    if (robotWorld) strength = clamp(strength * 1.6, 2, 2.5);
+    const scatter = robotWorld ? strength * 1.7 : strength;
+    if (robotWorld) strength = clamp(strength * 2.26, 2.8, 3.5);
+    speedCap = robotWorld ? 7 * strength * 1.15 : 0;
     // strength runs from about 0.3 (a lazy drag) to 2.6 (a hard flick). Lift
     // grows linearly with it, spin and scatter a little slower, so gentle
     // swipes tip the desk over and hard ones send it cartwheeling.
@@ -6001,7 +6002,8 @@
   let tracers = [];
   const ZOOM_OUT = 0.55;
   let lift = 0;               // meters the camera has risen to follow the pieces up
-  let downT = 0;              // how long everything has been back on the ground
+  let downT = 0;
+  let speedCap = 0;           // top speed for flying pieces just after a robot launch              // how long everything has been back on the ground
 
   // Only things in the air can be shot: not on the floor, and not resting
   // on something else.
@@ -6019,10 +6021,20 @@
   }
 
   // Robot rounds end a couple of seconds after the last piece comes down.
+  // Anything still moving well clear of the floor counts as not down yet.
   function robotRoundOver(dt) {
-    const up = grab || stateT < 1 || bodies.some((b) => b.kind !== 'shard' && airborne(b));
+    // The desk can kick its passengers far too hard on the way up; keep them
+    // within reach of the camera.
+    if (speedCap && stateT < 0.6) {
+      for (const b of bodies) {
+        const v = b.getLinearVelocity(), sp = v.length();
+        if (b !== desk && sp > speedCap) b.setLinearVelocity(V(v.x * speedCap / sp, v.y * speedCap / sp));
+      }
+    }
+    const up = grab || stateT < 1 || bodies.some((b) => b.kind !== 'shard' && b.isAwake() &&
+      b.getWorldCenter().y < floorY - 0.6 && b.getLinearVelocity().length() > 0.8 && airborne(b));
     downT = up ? 0 : downT + dt;
-    return downT > 2 || stateT > 20;
+    return downT > 1.5 || stateT > 9;
   }
 
   function mouseArmoryDone() {
