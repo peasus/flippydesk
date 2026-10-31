@@ -910,6 +910,218 @@
     };
   }
 
+  function stapler() {
+    const color = pick(['#e66b6b', '#3b3a44', '#6b8fe6', '#9aa0aa']);
+    return {
+      w: 0.17,
+      place(x, y) {
+        addBody(x, y, [R(-0.08, -0.025, 0.16, 0.025), R(-0.075, -0.05, 0.14, 0.028)], () => {
+          rrect(-0.08, -0.025, 0.16, 0.025, 0.008, '#3b3a44');
+          rrect(-0.075, -0.055, 0.15, 0.032, 0.014, color);
+          ellipse(-0.035, -0.046, 0.022, 0.005, 'rgba(255,255,255,0.4)', false);
+        }, { kind: 'stapler', density: 2 });
+      },
+    };
+  }
+
+  function tapeDispenser() {
+    const color = pick(['#3b3a44', '#e66b6b', '#6b8fe6', '#7cc58f']);
+    return {
+      w: 0.17,
+      place(x, y) {
+        addBody(x, y, [{ pts: [[-0.08, 0], [0.08, 0], [0.07, -0.05], [-0.03, -0.08], [-0.08, -0.05]] }], () => {
+          ellipse(-0.015, -0.06, 0.045, 0.045, 'rgba(230,240,250,0.8)');
+          ellipse(-0.015, -0.06, 0.022, 0.022, '#d7d9df');
+          poly([[-0.08, 0], [0.08, 0], [0.07, -0.05], [0.02, -0.05], [-0.015, -0.025], [-0.05, -0.05], [-0.08, -0.05]], color);
+          poly([[0.065, -0.05], [0.085, -0.05], [0.08, -0.06]], '#9aa0aa');
+        }, { kind: 'tape', density: 2.2 });
+      },
+    };
+  }
+
+  function deskFan() {
+    const color = pick(['#6b8fe6', '#f4f4f6', '#7cc58f', '#f2c14e']);
+    return {
+      w: 0.22,
+      place(x, y) {
+        let b;
+        b = addBody(x, y, [R(-0.07, -0.025, 0.14, 0.025), R(-0.012, -0.16, 0.024, 0.14), { x: 0, y: -0.24, r: 0.1 }], () => {
+          rrect(-0.07, -0.025, 0.14, 0.025, 0.01, color);
+          rrect(-0.012, -0.17, 0.024, 0.15, 0.006, color);
+          ellipse(0, -0.24, 0.1, 0.1, 'rgba(244,244,246,0.5)');
+          // the blades keep spinning until it lands hard
+          const spin = b.stopped ? 0.4 : clock * 25;
+          for (let i = 0; i < 3; i++) {
+            const a = spin + (i * Math.PI * 2) / 3;
+            ellipse(Math.cos(a) * 0.05, -0.24 + Math.sin(a) * 0.05, 0.035, 0.035, color, false);
+          }
+          ellipse(0, -0.24, 0.018, 0.018, '#3b3a44');
+          for (let i = -2; i <= 2; i++) line(i * 0.04, -0.33, i * 0.04, -0.15, 'rgba(42,39,51,0.25)', 0.004);
+        }, { kind: 'fan', density: 0.8 });
+        b.breakable = 'fan';
+      },
+    };
+  }
+
+  function deskPhone() {
+    return {
+      w: 0.24,
+      place(x, y) {
+        addBody(x, y, [{ pts: [[-0.11, 0], [0.11, 0], [0.09, -0.07], [-0.09, -0.07]] }, R(-0.1, -0.1, 0.2, 0.03)], () => {
+          poly([[-0.11, 0], [0.11, 0], [0.09, -0.07], [-0.09, -0.07]], '#3b3a44');
+          for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) rrect(-0.02 + c * 0.03, -0.06 + r * 0.018, 0.022, 0.012, 0.003, '#d7d9df', false);
+          rrect(-0.08, -0.055, 0.05, 0.03, 0.004, '#9ccf5e', false);
+          rrect(-0.1, -0.105, 0.2, 0.035, 0.017, '#2f3340');
+          ellipse(-0.085, -0.088, 0.025, 0.02, '#2f3340');
+          ellipse(0.085, -0.088, 0.025, 0.02, '#2f3340');
+        }, { kind: 'phone', density: 1.4 });
+      },
+    };
+  }
+
+  function headphones() {
+    const color = pick(['#3b3a44', '#e66b6b', '#f4f4f6', '#b48be0']);
+    return {
+      w: 0.2,
+      place(x, y) {
+        addBody(x, y, [R(-0.09, -0.06, 0.05, 0.06), R(0.04, -0.06, 0.05, 0.06), R(-0.08, -0.17, 0.16, 0.03, { d: 0.3 })], () => {
+          ctx.beginPath();
+          ctx.arc(0, -0.06, 0.075, Math.PI, 0);
+          ctx.lineWidth = 0.03;
+          ctx.strokeStyle = INK;
+          ctx.stroke();
+          ctx.lineWidth = 0.016;
+          ctx.strokeStyle = color;
+          ctx.stroke();
+          rrect(-0.095, -0.075, 0.05, 0.075, 0.02, color);
+          rrect(0.045, -0.075, 0.05, 0.075, 0.02, color);
+        }, { kind: 'headphones', density: 0.6, restitution: 0.3 });
+      },
+    };
+  }
+
+  function tissueBox() {
+    const color = pick(['#b8dbe6', '#f2c9a5', '#c8e6b0', '#e8c8e6']);
+    return {
+      w: 0.2,
+      place(x, y) {
+        addBody(x, y, [R(-0.09, -0.1, 0.18, 0.1)], () => {
+          ctx.beginPath();
+          ctx.moveTo(-0.02, -0.1);
+          ctx.quadraticCurveTo(-0.04, -0.16, 0, -0.17);
+          ctx.quadraticCurveTo(0.04, -0.16, 0.02, -0.1);
+          finish('#ffffff', true);
+          rrect(-0.09, -0.1, 0.18, 0.1, 0.008, color);
+          for (let i = 0; i < 4; i++) ellipse(-0.06 + i * 0.04, -0.05, 0.012, 0.012, 'rgba(255,255,255,0.6)', false);
+        }, { kind: 'tissues', density: 0.3 });
+      },
+    };
+  }
+
+  function banana() {
+    const pts = [[-0.09, -0.03], [-0.05, -0.012], [0, -0.008], [0.05, -0.014], [0.09, -0.035], [0.08, -0.045], [0.04, -0.035], [0, -0.032], [-0.05, -0.036], [-0.085, -0.05]];
+    return {
+      w: 0.2,
+      place(x, y) {
+        addBody(x, y, [{ pts: [[-0.09, -0.03], [0, -0.008], [0.09, -0.035], [0, -0.032]] }], () => {
+          poly(pts, '#f2d34e');
+          line(-0.092, -0.04, -0.1, -0.05, '#5b3a2a', 0.01);
+          ellipse(0.088, -0.04, 0.006, 0.006, '#5b3a2a', false);
+        }, { kind: 'banana', density: 0.5, friction: 0.2 });
+      },
+    };
+  }
+
+  function calculator() {
+    return {
+      w: 0.13,
+      place(x, y) {
+        addBody(x, y, [R(-0.055, -0.16, 0.11, 0.16)], () => {
+          rrect(-0.055, -0.16, 0.11, 0.16, 0.012, '#4a4f5c');
+          rrect(-0.042, -0.148, 0.084, 0.03, 0.004, '#c8d8b0');
+          ctx.fillStyle = '#2a2733';
+          ctx.font = 'bold 0.022px monospace';
+          ctx.textAlign = 'right';
+          ctx.fillText('58008', 0.037, -0.125);
+          ctx.textAlign = 'start';
+          for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) rrect(-0.04 + c * 0.03, -0.105 + r * 0.024, 0.022, 0.017, 0.004, r === 3 && c === 2 ? '#f08a4b' : '#d7d9df', false);
+        }, { kind: 'calculator', density: 1.2 });
+      },
+    };
+  }
+
+  function waterGlass() {
+    const fill = rand(0.4, 0.85);
+    const glassPts = [[-0.045, 0], [0.045, 0], [0.055, -0.15], [-0.055, -0.15]];
+    return {
+      w: 0.13,
+      place(x, y) {
+        const b = addBody(x, y, [{ pts: glassPts }], () => {
+          const h = 0.15 * fill;
+          poly([[-0.045, -0.005], [0.045, -0.005], [0.045 + 0.01 * fill, -h], [-0.045 - 0.01 * fill, -h]], 'rgba(120,190,240,0.7)', false);
+          poly(glassPts, 'rgba(214,236,250,0.35)');
+          line(-0.035, -0.13, -0.03, -0.03, 'rgba(255,255,255,0.7)', 0.008);
+        }, { kind: 'glass', density: 0.9 });
+        b.breakable = 'glass';
+        b.shatter = () => {
+          const c = b.getWorldCenter();
+          const v = b.getLinearVelocity();
+          for (let i = 0; i < 26 * fill; i++) {
+            drops.push(Object.assign({ x: c.x, y: c.y, vx: v.x + rand(-2.5, 2.5), vy: v.y + rand(-3, 0.5), r: rand(0.006, 0.016) }, WATER));
+          }
+          spawnShards(b, 0, -0.07, 6, GLASS);
+          world.destroyBody(b);
+          bodies.splice(bodies.indexOf(b), 1);
+        };
+      },
+    };
+  }
+
+  // A goldfish bowl. If it breaks, the fish flops about on whatever it lands on.
+  function fishbowl() {
+    const fishColor = pick(['#f08a4b', '#f2c14e', '#e66b6b']);
+    const drawFish = (sx = 1) => {
+      ctx.save();
+      ctx.scale(sx, 1);
+      poly([[-0.04, 0], [-0.065, -0.02], [-0.065, 0.02]], fishColor);
+      ellipse(0, 0, 0.04, 0.024, fishColor);
+      ellipse(0.022, -0.006, 0.005, 0.005, INK, false);
+      ctx.restore();
+    };
+    return {
+      w: 0.24,
+      place(x, y) {
+        const b = addBody(x, y, [R(-0.06, -0.02, 0.12, 0.02), { x: 0, y: -0.11, r: 0.105 }], () => {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(0, -0.11, 0.1, 0, Math.PI * 2);
+          ctx.clip();
+          rrect(-0.11, -0.16, 0.22, 0.2, 0, 'rgba(120,190,240,0.55)', false);
+          ctx.translate(Math.sin(clock * 0.9) * 0.04, -0.09 + Math.sin(clock * 2.1) * 0.01);
+          drawFish(Math.cos(clock * 0.9) > 0 ? 1 : -1);
+          ctx.restore();
+          ellipse(0, -0.11, 0.105, 0.105, 'rgba(214,236,250,0.3)');
+          ellipse(-0.05, -0.15, 0.015, 0.03, 'rgba(255,255,255,0.6)', false);
+          rrect(-0.04, -0.005, 0.08, 0.008, 0.004, '#9ccf5e', false);
+        }, { kind: 'fishbowl', density: 0.9 });
+        b.breakable = 'fishbowl';
+        b.shatter = () => {
+          const c = b.getWorldPoint(V(0, -0.11));
+          const v = b.getLinearVelocity();
+          for (let i = 0; i < 34; i++) {
+            drops.push(Object.assign({ x: c.x, y: c.y, vx: v.x + rand(-2.5, 2.5), vy: v.y + rand(-3, 0.5), r: rand(0.008, 0.018) }, WATER));
+          }
+          spawnShards(b, 0, -0.11, 7, GLASS);
+          const fish = addBody(c.x, c.y, [{ x: 0, y: 0, r: 0.025 }], () => drawFish(fish.getLinearVelocity().x < 0 ? -1 : 1), { kind: 'fish', density: 0.4, restitution: 0.5, z: 2 });
+          fish.flop = 6;
+          fish.setLinearVelocity(V(v.x, v.y - 1));
+          world.destroyBody(b);
+          bodies.splice(bodies.indexOf(b), 1);
+        };
+      },
+    };
+  }
+
   // ---------- work swag ----------
   // Merch from companies that don't exist. Most of it unlocks as you flip.
 
@@ -1356,7 +1568,7 @@
       it.place = (x, y) => {
         const prev = currentItem;
         currentItem = name;
-        try { place(x, y); } finally { currentItem = prev; }
+        try { place.call(it, x, y); } finally { currentItem = prev; }
       };
       return it;
     };
@@ -1387,6 +1599,16 @@
   alarmClock = named('Alarm clock', alarmClock);
   stickyPad = named('Sticky notes', stickyPad);
   photoFrame = named('Photo frame', photoFrame);
+  stapler = named('Stapler', stapler);
+  tapeDispenser = named('Tape dispenser', tapeDispenser);
+  deskFan = named('Desk fan', deskFan);
+  deskPhone = named('Desk phone', deskPhone);
+  headphones = named('Headphones', headphones);
+  tissueBox = named('Tissue box', tissueBox);
+  banana = named('Banana', banana);
+  calculator = named('Calculator', calculator);
+  waterGlass = named('Glass of water', waterGlass);
+  fishbowl = named('Fishbowl', fishbowl);
 
   // Swag unlocks as the flip count grows; each new item is guaranteed a spot
   // on the next desk.
@@ -1446,7 +1668,8 @@
     () => [crt(), keyboard(), mouse()],
     () => [speaker(), monitor(), speaker(), keyboard(), mouse()],
   ];
-  const EXTRAS = [lamp, pencilCup, duck, globe, sodaCan, alarmClock, stickyPad, photoFrame, plant, bookStack, mug];
+  const EXTRAS = [lamp, pencilCup, duck, globe, sodaCan, alarmClock, stickyPad, photoFrame, plant, bookStack, mug,
+    stapler, tapeDispenser, deskFan, deskPhone, headphones, tissueBox, banana, calculator, waterGlass, fishbowl];
 
   function buildItems() {
     const deskTop = floorY - DESK_H - 0.001;
@@ -2282,8 +2505,9 @@
 
   const sfx = (() => {
     let ac = null, master = null, noise = null, recent = [];
-    let muted = false;
-    try { muted = localStorage.getItem('flippydesk.muted') === '1'; } catch (e) { /* storage blocked */ }
+    // Start muted until the player turns sound on.
+    let muted = true;
+    try { muted = localStorage.getItem('flippydesk.muted') !== '0'; } catch (e) { /* storage blocked */ }
 
     // Browsers only allow audio after a user gesture, so this runs on every
     // tap, click or key press until the audio context is running.
@@ -2566,7 +2790,7 @@
   const GLASS = 'rgba(214,236,250,0.9)';
   const GRACE = 0.25;        // ignore the hits from the launch itself
   const MAX_SHARDS = 40;
-  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350, lava: 350 };
+  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350, lava: 350, glass: 200, fishbowl: 400 };
 
   function makeScreen(b, x, y, w, h) {
     b.breakable = 'screen';
@@ -2648,6 +2872,14 @@
       }
       else if (b.breakable === 'lava' && dv > 3) breakApart(b, 'lava', 'lava lamp popped');
       else if (b.breakable === 'zen' && dv > 3 && b.sand) spillSand(b);
+      else if (b.breakable === 'glass' && dv > 3) breakApart(b, 'glass', 'glass smashed');
+      else if (b.breakable === 'fishbowl' && dv > 3.2) breakApart(b, 'fishbowl', 'fishbowl smashed');
+      else if (b.breakable === 'fan' && dv > 3.5 && !b.stopped) {
+        b.stopped = true;
+        fry(b, 0, -0.24, 10);
+        const c = b.getWorldCenter();
+        addPoints(150, 'fan busted', c.x, c.y);
+      }
     }
   }
 
@@ -2664,7 +2896,7 @@
   function breakApart(b, kind, label) {
     const c = b.getWorldCenter();
     b.shatter();
-    if (kind === 'lamp' || kind === 'snowglobe' || kind === 'acrylic' || kind === 'lava') sfx.shatter(0.7); else sfx.smash();
+    if (kind === 'lamp' || kind === 'snowglobe' || kind === 'acrylic' || kind === 'lava' || kind === 'glass' || kind === 'fishbowl') sfx.shatter(0.7); else sfx.smash();
     addPoints(POINTS[kind], label, c.x, c.y);
     shake = Math.min(1, shake + 0.2);
   }
@@ -2835,6 +3067,15 @@
   }
 
   function stepFx(dt) {
+    // A loose goldfish flops about for a while.
+    for (const b of bodies) {
+      if (b.kind !== 'fish' || !(b.flop > 0)) continue;
+      b.flop -= dt;
+      if (chance(dt * 2.5) && b.getLinearVelocity().length() < 0.5) {
+        b.applyLinearImpulse(V(rand(-0.4, 0.4) * b.getMass() * 4, -b.getMass() * rand(2.5, 4)), b.getWorldCenter());
+        b.setAngularVelocity(rand(-12, 12));
+      }
+    }
     for (const b of bodies) {
       if (!(b.smokeT > 0)) continue;
       b.smokeT -= dt;
@@ -2940,6 +3181,9 @@
     'zen disturbed': 'Zen gardens spilled',
     'desk cracked': 'Desk cracks',
     'drawer popped': 'Drawers popped out',
+    'glass smashed': 'Glasses smashed',
+    'fishbowl smashed': 'Fishbowls smashed',
+    'fan busted': 'Desk fans busted',
   };
   const damageBtn = document.getElementById('damage');
   const reportEl = document.getElementById('report');
