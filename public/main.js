@@ -345,10 +345,8 @@
             screenFace(b, cx0 - sw / 2, cy0 - fh / 2 + 0.03, sw, fh - 0.06, sc.hue, sc.lines);
           }, { kind: 'computer', group: -2 });
           makeScreen(b, cx0 - sw / 2, cy0 - fh / 2 + 0.03, sw, fh - 0.06);
-          const j = world.createJoint(pl.RevoluteJoint({
-            enableLimit: true, lowerAngle: -0.35, upperAngle: 0.35,
-            enableMotor: true, motorSpeed: 0, maxMotorTorque: 8,
-          }, pole, b, V(px, py)));
+          // a springy weld, so the screen wobbles on the arm without sagging
+          const j = world.createJoint(pl.WeldJoint({ frequencyHz: 6, dampingRatio: 0.5 }, pole, b, V(px, py)));
           armJoints.push({ j, limit: 75, label: 'monitor snapped off' });
         });
         kb.place(x + 0.05 - (span > 0.9 ? 0.12 : 0), y);
@@ -1390,6 +1388,7 @@
     buildItems();
     placeDog();
     schedulePal();
+    scheduleGust();
     bodies.sort((a, b) => a.z - b.z);
     lastDeskSpeed = 0;
   }
@@ -1693,6 +1692,26 @@
     'Per my last email... the report?',
     'Love the energy! Report by end of day?',
     'Hey buddy. That report. Any update?',
+    'Gonna need you to come in Saturday. And Sunday.',
+    'Can you put the deck in a spreadsheet? And then back in a deck?',
+    'Quick one: can you make the logo pop more?',
+    'Let\u2019s take the meeting about the meeting offline.',
+    'Did you fill out the survey about the surveys?',
+    'We\u2019re pivoting. Again. Update the roadmap?',
+    'Can you print the internet for me? Just the good parts.',
+    'Need you on a call at 6am. It\u2019s with Tokyo. Or Tulsa.',
+    'I\u2019ll need those numbers yesterday, ideally.',
+    'Can you cc me on everything? Like, everything.',
+    'Reply-all and let them know we\u2019re aligned.',
+    'Quick favor: rename all the files. Alphabetically. By vibe.',
+    'Hey, where are we on the synergy deliverables?',
+    'Can you hop on a quick 90-minute sync?',
+    'Mandatory fun is at 4. Bring a dish.',
+    'Who moved my cheese? No, literally. It was in the fridge.',
+    'Let\u2019s circle the wagons and touch base on bandwidth.',
+    'Can we make it more blockchain?',
+    'The printer is on fire again. Can you handle it?',
+    'Big win team! Anyway, budgets are cut.',
   ];
   // Two managers share the job; each visit is one or the other.
   const BOSS_LOOKS = [
@@ -1859,6 +1878,89 @@
     ctx.fillStyle = INK;
     lines.forEach((l, i) => ctx.fillText(l, bx + 0.06, by + 0.04 + (i + 0.8) * lh));
     ctx.restore();
+  }
+
+  // ---------- drive-by ----------
+  // Very rarely, someone strolls past behind the desk, whistling, and leaves
+  // something behind. The cat does not stick around.
+
+  const gust = { mode: 'away', due: Infinity, x: 0, dir: 1, t: 0, look: null, clouds: [] };
+
+  function scheduleGust() {
+    gust.due = chance(0.03) ? rand(1, 4) : Infinity;
+    gust.mode = 'away';
+    gust.clouds = [];
+  }
+
+  function updateGust(dt) {
+    for (const c of gust.clouds) {
+      c.t += dt;
+      c.x += c.vx * dt;
+      c.y -= 0.08 * dt;
+      c.r += 0.05 * dt;
+    }
+    gust.clouds = gust.clouds.filter((c) => c.t < 5);
+    if (gust.mode === 'away' && state === 'ready' && idleT > gust.due) {
+      gust.due = Infinity;
+      gust.dir = chance(0.5) ? 1 : -1;
+      Object.assign(gust, { mode: 'walk', t: 0, x: gust.dir > 0 ? -0.4 : Wm + 0.4, look: pick(PAL_LOOKS), tooted: false });
+    }
+    if (gust.mode !== 'walk') return;
+    gust.t += dt;
+    gust.x += gust.dir * 0.9 * dt;
+    if (!gust.tooted && Math.abs(gust.x - cx) < 0.3) {
+      gust.tooted = true;
+      sfx.toot();
+      for (let i = 0; i < 7; i++) {
+        gust.clouds.push({ x: gust.x - gust.dir * rand(0.05, 0.25), y: floorY - rand(0.7, 1.0), r: rand(0.08, 0.15), vx: -gust.dir * rand(0.02, 0.1), t: -i * 0.05 });
+      }
+      wakeCats();
+      if (dog && dog.mode === 'sleep') Object.assign(dog, { mode: 'startled', t: 0, dir: dog.x < gust.x ? -1 : 1 });
+    }
+    if (gust.x < -0.6 || gust.x > Wm + 0.6) gust.mode = 'away';
+  }
+
+  function drawGust() {
+    if (gust.mode !== 'walk') return;
+    const L = gust.look;
+    const step = Math.sin(gust.t * 9);
+    ctx.save();
+    ctx.translate(gust.x, floorY - Math.abs(step) * 0.015);
+    ctx.scale(gust.dir, 1);
+    line(-0.05, -0.75, -0.05 + step * 0.12, -0.03, INK, 0.11);
+    line(-0.05, -0.75, -0.05 + step * 0.12, -0.03, L.pants, 0.08);
+    line(0.05, -0.75, 0.05 - step * 0.12, -0.03, INK, 0.11);
+    line(0.05, -0.75, 0.05 - step * 0.12, -0.03, L.pants, 0.08);
+    rrect(-0.17, -1.34, 0.34, 0.62, 0.09, L.hoodie);
+    line(0, -1.25, -step * 0.12, -0.85, INK, 0.1);
+    line(0, -1.25, -step * 0.12, -0.85, L.hoodie, 0.07);
+    ellipse(0.01, -1.48, 0.12, 0.14, L.skin);
+    ctx.beginPath();
+    ctx.ellipse(0, -1.53, 0.125, 0.1, 0, Math.PI, Math.PI * 2);
+    ctx.fillStyle = L.hair;
+    ctx.fill();
+    // eyes glancing sideways, lips pursed in a whistle
+    ellipse(0.05, -1.49, 0.012, 0.012, INK, false);
+    ellipse(0.1, -1.49, 0.012, 0.012, INK, false);
+    ellipse(0.09, -1.42, 0.014, 0.014, INK, false);
+    ctx.restore();
+    if (!gust.tooted || gust.t % 1 < 0.5) {
+      ctx.save();
+      ctx.font = 'bold 0.1px ui-rounded, system-ui, sans-serif';
+      ctx.fillStyle = INK;
+      ctx.fillText('♪', gust.x + gust.dir * 0.2, floorY - 1.62 - Math.sin(gust.t * 4) * 0.03);
+      ctx.restore();
+    }
+  }
+
+  function drawClouds() {
+    for (const c of gust.clouds) {
+      if (c.t < 0) continue;
+      ctx.globalAlpha = Math.min(1, c.t * 4) * Math.max(0, 1 - c.t / 5) * 0.55;
+      ellipse(c.x, c.y, c.r, c.r * 0.8, '#9ccf5e', false);
+      ellipse(c.x + c.r * 0.6, c.y + c.r * 0.2, c.r * 0.6, c.r * 0.5, '#86bf47', false);
+    }
+    ctx.globalAlpha = 1;
   }
 
   function drawBoss() {
@@ -2254,6 +2356,40 @@
         tone('triangle', 377, p * 0.3, 1.3);
         tone('sine', 512, p * 0.2, 0.9);
         burst('lowpass', 900, 1, p * 0.6, 0.15);
+      },
+      // A low, wobbly, unmistakable sound.
+      toot() {
+        if (!ready()) return;
+        const t = ac.currentTime + 0.02;
+        const dur = 0.75;
+        const o = ac.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(110, t);
+        o.frequency.linearRampToValueAtTime(70, t + dur);
+        const lfo = ac.createOscillator();
+        lfo.frequency.setValueAtTime(18, t);
+        lfo.frequency.linearRampToValueAtTime(9, t + dur);
+        const depth = ac.createGain();
+        depth.gain.value = 25;
+        lfo.connect(depth);
+        depth.connect(o.frequency);
+        const f = ac.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 500;
+        f.Q.value = 4;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.5, t + 0.03);
+        g.gain.setValueAtTime(0.45, t + dur * 0.7);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(f);
+        f.connect(g);
+        g.connect(master);
+        o.start(t);
+        lfo.start(t);
+        o.stop(t + dur + 0.05);
+        lfo.stop(t + dur + 0.05);
+        burst('lowpass', 300, 1, 0.15, dur * 0.8);
       },
       // Two quick startled yips.
       bark() {
@@ -2703,6 +2839,7 @@
     updateDog(dt);
     updateBoss(dt);
     updatePal(dt);
+    updateGust(dt);
     for (const p of popups) p.t += dt;
     popups = popups.filter((p) => p.t < 1.4);
     if (state === 'flipped' && !landed) hangEl.textContent = `hang time ${hang.toFixed(2)}s`;
@@ -2985,6 +3122,7 @@
 
     drawRoom();
     drawBoss();
+    drawGust();
     drawPal();
 
     for (const b of bodies) {
@@ -2998,6 +3136,7 @@
     }
     for (const c of cats) drawCat(c);
     drawDog();
+    drawClouds();
     drawBossBubble();
     drawPalBubble();
 
@@ -3156,6 +3295,7 @@
     celebrate: () => celebrate(desk),
     get deskInfo() { return { cracks: desk.splits.length, drawers: bodies.filter(b => b.kind === "drawer").length }; },
     pal: () => { pal.due = 0; },
+    gust: () => { gust.due = 0; },
     get dog() { return dog && dog.mode; },
     get arms() { return armJoints.map((a) => [a.broken ? 1 : 0, Math.round(a.max || 0)]); },
     get kinds() { return bodies.map((b) => b.kind); },
