@@ -1726,6 +1726,11 @@
     smoke = [];
     grab = null;
     armJoints = [];
+    weapon = null;
+    weaponRound = false;
+    flames = [];
+    booms = [];
+    rings = [];
     world.on('post-solve', onPostSolve);
     world.on('begin-contact', onBeginContact);
 
@@ -2429,6 +2434,7 @@
   // Starts a round: the scoring, breakage and reset timer all run from here.
   function startRound() {
     state = 'flipped';
+    weaponRound = false;
     stateT = 0;
     idleT = 0;
     flips++;
@@ -2591,6 +2597,57 @@
       o.stop(t + dur + 0.05);
     }
 
+    // A sustained tone that holds its level, then dies away at the end.
+    function hold(type, freq, peak, dur, delay = 0, freqEnd = 0, wobble = 0) {
+      const t = ac.currentTime + delay;
+      const o = ac.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+      if (wobble) {
+        const lfo = ac.createOscillator();
+        const lg = ac.createGain();
+        lfo.frequency.value = wobble;
+        lg.gain.value = freq * 0.04;
+        lfo.connect(lg);
+        lg.connect(o.frequency);
+        lfo.start(t);
+        lfo.stop(t + dur + 0.1);
+      }
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + 0.03);
+      g.gain.setValueAtTime(peak, t + Math.max(0.04, dur - 0.08));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g);
+      g.connect(master);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
+
+    // Looping noise, for roars longer than the noise buffer.
+    function rumble(freq, freqEnd, peak, dur, delay = 0, type = 'lowpass') {
+      const t = ac.currentTime + delay;
+      const src = ac.createBufferSource();
+      src.buffer = noise;
+      src.loop = true;
+      const f = ac.createBiquadFilter();
+      f.type = type;
+      f.frequency.setValueAtTime(freq, t);
+      f.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+      f.Q.value = 0.7;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(peak * 0.4, t + dur * 0.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f);
+      f.connect(g);
+      g.connect(master);
+      src.start(t);
+      src.stop(t + dur + 0.05);
+    }
+
     function reset() {
       try { ac.close(); } catch (e) { /* already closed */ }
       ac = null;
@@ -2751,6 +2808,51 @@
         if (!ready()) return;
         for (let i = 0; i < 4; i++) burst('highpass', rand(3000, 6000), 1, 0.25, 0.05, i * rand(0.04, 0.08));
         tone('sawtooth', 120, 0.08, 0.35, 0, 60);
+      },
+      // ----- weapons -----
+      // A blade biting through wood with a ringing steel edge.
+      clang() {
+        if (!ready()) return;
+        burst('lowpass', 700, 0.8, 0.9, 0.35);
+        burst('highpass', 3500, 1, 0.35, 0.12);
+        for (const [f, p] of [[1180, 0.12], [1770, 0.08], [2630, 0.05]]) tone('triangle', f, p, 1.1, 0, f * 0.98);
+      },
+      tick() {
+        if (!ready()) return;
+        tone('square', 2200, 0.06, 0.025);
+        burst('highpass', 5000, 1, 0.12, 0.02);
+      },
+      boom(v = 1) {
+        if (!ready()) return;
+        rumble(1600, 70, 1.1 * v, 1.6);
+        tone('sine', 110, 0.9 * v, 1.2, 0, 32);
+        burst('highpass', 2500, 0.7, 0.4 * v, 0.15);
+        for (let i = 0; i < 6; i++) burst('bandpass', rand(400, 1500), 2, 0.25 * v, 0.08, 0.15 + i * rand(0.08, 0.2));
+      },
+      // A rising whine while the laser charges.
+      charge() {
+        if (!ready()) return;
+        hold('sawtooth', 160, 0.06, 0.85, 0, 1900);
+        hold('sine', 320, 0.1, 0.85, 0, 3800);
+      },
+      beam(dur) {
+        if (!ready()) return;
+        hold('sawtooth', 92, 0.14, dur, 0, 0, 7);
+        hold('square', 184, 0.05, dur, 0, 0, 11);
+        rumble(4200, 3000, 0.18, dur, 0, 'bandpass');
+      },
+      beep(fast) {
+        if (!ready()) return;
+        tone('square', fast ? 2093 : 1760, 0.1, fast ? 0.05 : 0.12);
+      },
+      // The big one: a crack, then a roar that rolls on for seconds.
+      nuke() {
+        if (!ready()) return;
+        burst('highpass', 1500, 0.7, 0.8, 0.3);
+        rumble(3000, 50, 1.3, 7);
+        rumble(500, 30, 1.2, 9, 0.2);
+        tone('sine', 70, 1, 5, 0, 20);
+        for (let i = 0; i < 14; i++) burst('lowpass', rand(300, 900), 1, 0.4, rand(0.2, 0.5), 0.3 + i * rand(0.15, 0.45));
       },
       // Two quick startled yips.
       bark() {
@@ -3294,8 +3396,851 @@
   reportEl.addEventListener('click', (e) => { if (e.target === reportEl) closeReport(); });
   showDamage(false);
 
+  // ---------- armory ----------
+  // Points from normal flips go into a bank. The bank buys weapons, and each
+  // weapon you own can be used on any desk. Weapon rounds score nothing.
+
+  const WEAPONS = [
+    { id: 'sword', name: 'Broadsword', icon: '\u{1F5E1}️', price: 10000, blurb: 'One mighty overhead swing. The desk comes apart in two.' },
+    { id: 'grenade', name: 'Frag grenade', icon: '\u{1F4A3}', price: 30000, blurb: 'Pull the pin, lob it on the desk, take cover.' },
+    { id: 'laser', name: 'Laser cannon', icon: '⚡', price: 75000, blurb: 'Slices the desk clean through and sets both halves ablaze.' },
+    { id: 'nuke', name: 'Tactical nuke', icon: '☢️', price: 150000, blurb: 'Slid under the desk. It beeps. Then it doesn’t.' },
+  ];
+  const TRY_ALL = /[?&]armory\b/.test(location.search);
+  let cash = 0;
+  let owned = [];
+  try { cash = parseInt(localStorage.getItem('flippydesk.cash'), 10) || 0; } catch (e) { cash = 0; }
+  try { owned = JSON.parse(localStorage.getItem('flippydesk.owned')) || []; } catch (e) { owned = []; }
+  let weaponRound = false;
+  let weapon = null;      // the weapon animation in progress
+  let flames = [];
+  let booms = [];         // fireball puffs
+  let rings = [];         // shockwave rings
+
+  const shopBtn = document.getElementById('shop');
+  const storeEl = document.getElementById('store');
+  const arsenalEl = document.getElementById('arsenal');
+  const has = (id) => TRY_ALL || owned.includes(id);
+  const short = (n) => (n >= 100000 ? `${Math.floor(n / 1000)}k` : n >= 10000 ? `${(n / 1000).toFixed(1)}k` : n.toLocaleString());
+
+  function saveBank() {
+    try {
+      localStorage.setItem('flippydesk.cash', String(cash));
+      localStorage.setItem('flippydesk.owned', JSON.stringify(owned));
+    } catch (e) { /* private mode */ }
+  }
+
+  function bankPoints(n) {
+    if (n <= 0) return;
+    cash += n;
+    saveBank();
+    showBank(true);
+  }
+
+  function showBank(bump) {
+    shopBtn.querySelector('.n').textContent = short(cash);
+    if (bump) {
+      shopBtn.classList.remove('bump');
+      void shopBtn.offsetWidth;
+      shopBtn.classList.add('bump');
+    }
+    arsenalEl.textContent = '';
+    for (const w of WEAPONS) {
+      if (!has(w.id)) continue;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = w.icon;
+      b.title = w.name;
+      b.setAttribute('aria-label', `Use the ${w.name}`);
+      b.addEventListener('click', () => { sfx.unlock(); useWeapon(w.id); });
+      arsenalEl.appendChild(b);
+    }
+    arsenalEl.classList.toggle('busy', state !== 'ready');
+  }
+
+  function openStore() {
+    storeEl.querySelector('.bank').textContent = `You have ${cash.toLocaleString()} points to spend. Every point you score on a normal flip goes in the bank.`;
+    const list = storeEl.querySelector('ul');
+    list.textContent = '';
+    for (const w of WEAPONS) {
+      const li = document.createElement('li');
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      icon.textContent = w.icon;
+      const info = document.createElement('div');
+      const name = document.createElement('b');
+      name.textContent = w.name;
+      const blurb = document.createElement('span');
+      blurb.textContent = w.blurb;
+      info.append(name, blurb);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      if (has(w.id)) {
+        btn.textContent = 'Owned';
+        btn.disabled = true;
+        btn.className = 'owned';
+      } else if (cash >= w.price) {
+        btn.textContent = `Buy · ${short(w.price)}`;
+        btn.addEventListener('click', () => {
+          cash -= w.price;
+          owned.push(w.id);
+          saveBank();
+          showBank(false);
+          sfx.unlock();
+          sfx.ding(true);
+          toastEl.textContent = `${w.name} acquired`;
+          toastEl.classList.remove('show');
+          void toastEl.offsetWidth;
+          toastEl.classList.add('show');
+          openStore();
+        });
+      } else {
+        btn.textContent = `${short(w.price)}`;
+        btn.disabled = true;
+        btn.title = `Earn ${(w.price - cash).toLocaleString()} more points`;
+        const need = document.createElement('small');
+        need.textContent = `${short(w.price - cash)} to go`;
+        info.appendChild(need);
+      }
+      li.append(icon, info, btn);
+      list.appendChild(li);
+    }
+    storeEl.hidden = false;
+    storeEl.querySelector('.close').focus();
+  }
+
+  function closeStore() {
+    storeEl.hidden = true;
+    shopBtn.focus();
+  }
+
+  shopBtn.addEventListener('click', openStore);
+  storeEl.querySelector('.close').addEventListener('click', closeStore);
+  storeEl.addEventListener('click', (e) => { if (e.target === storeEl) closeStore(); });
+
+  // ----- cutting the desk -----
+
+  // Clip a convex polygon to a convex region (both as [[x, y], ...]).
+  function clipConvex(pts, region) {
+    let out = pts;
+    const cxr = region.reduce((s, p) => s + p[0], 0) / region.length;
+    const cyr = region.reduce((s, p) => s + p[1], 0) / region.length;
+    for (let i = 0; i < region.length && out.length; i++) {
+      const a = region[i], b = region[(i + 1) % region.length];
+      const side = (p) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+      const keep = Math.sign(side([cxr, cyr]));
+      const inp = out;
+      out = [];
+      for (let k = 0; k < inp.length; k++) {
+        const p = inp[k], q = inp[(k + 1) % inp.length];
+        const sp = side(p) * keep, sq = side(q) * keep;
+        if (sp >= 0) out.push(p);
+        if ((sp >= 0) !== (sq >= 0)) {
+          const t = sp / (sp - sq);
+          out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+        }
+      }
+    }
+    // drop near-duplicate points so planck gets a clean polygon
+    return out.filter((p, i) => {
+      const q = out[(i + 1) % out.length];
+      return Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.004;
+    });
+  }
+
+  const polyArea = (pts) => Math.abs(pts.reduce((s, p, i) => {
+    const q = pts[(i + 1) % pts.length];
+    return s + p[0] * q[1] - q[0] * p[1];
+  }, 0)) / 2;
+
+  // Local polygons of every fixture on a body.
+  function bodyPolys(b) {
+    const polys = [];
+    for (let f = b.getFixtureList(); f; f = f.getNext()) {
+      const s = f.getShape();
+      if (s.getType() === 'polygon') polys.push(s.m_vertices.map((v) => [v.x, v.y]));
+      else if (s.getType() === 'circle') {
+        const c = s.getCenter(), r = s.getRadius();
+        polys.push(Array.from({ length: 8 }, (_, i) => [c.x + Math.cos(i * 0.785) * r, c.y + Math.sin(i * 0.785) * r]));
+      }
+    }
+    return polys;
+  }
+
+  // Replace the desk with one piece per region. `cuts` are the local cut
+  // lines, so their edges can glow. Returns the pieces.
+  function splitDesk(regions, cuts) {
+    const old = desk;
+    const polys = bodyPolys(old);
+    const pos = old.getPosition();
+    const angle = old.getAngle();
+    const oldDraw = old.draw;
+    const pieces = [];
+    for (const region of regions) {
+      const parts = [];
+      for (const poly of polys) {
+        const c = clipConvex(poly, region);
+        if (c.length >= 3 && polyArea(c) > 0.0006) parts.push({ pts: c.slice(0, 8) });
+      }
+      if (!parts.length) continue;
+      let piece;
+      piece = addBody(pos.x, pos.y, parts, () => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(region[0][0], region[0][1]);
+        for (const p of region) ctx.lineTo(p[0], p[1]);
+        ctx.closePath();
+        ctx.clip();
+        oldDraw();
+        ctx.restore();
+      }, { angle, kind: 'desk', density: 3, friction: 0.7, restitution: 0.1, z: -1 });
+      piece.item = 'Desk';
+      piece.polys = parts.map((p) => p.pts);
+      piece.cuts = cuts;
+      piece.hot = 0;
+      piece.char = 0;
+      const v = old.getLinearVelocityFromWorldPoint(piece.getWorldCenter());
+      piece.setLinearVelocity(v);
+      piece.setAngularVelocity(old.getAngularVelocity());
+      pieces.push(piece);
+    }
+    for (const a of armJoints) if (!a.broken && (a.j.getBodyA() === old || a.j.getBodyB() === old)) a.broken = true;
+    world.destroyBody(old);
+    bodies.splice(bodies.indexOf(old), 1);
+    pieces.sort((a, b) => b.getMass() - a.getMass());
+    desk = pieces[0];
+    desk.splits = old.splits;
+    bodies.sort((a, b) => a.z - b.z);
+    return pieces;
+  }
+
+  // Regions either side of a local cut line from (xt, top) to (xb, bottom).
+  function halves(xt, xb) {
+    const T = -3, B = 1;
+    return [
+      [[-5, T], [xt, T], [xb, B], [-5, B]],
+      [[xt, T], [5, T], [5, B], [xb, B]],
+    ];
+  }
+
+  // Draw the char and the glowing cut edges on a body, in its local frame.
+  function drawScorch(b) {
+    if (b.char > 0) {
+      ctx.fillStyle = `rgba(28,20,14,${Math.min(0.8, b.char)})`;
+      for (const poly of b.polys || bodyPolys(b)) {
+        ctx.beginPath();
+        ctx.moveTo(poly[0][0], poly[0][1]);
+        for (const p of poly) ctx.lineTo(p[0], p[1]);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    if (b.hot > 0 && b.cuts) {
+      ctx.lineCap = 'round';
+      for (const poly of b.polys) {
+        for (let i = 0; i < poly.length; i++) {
+          const p = poly[i], q = poly[(i + 1) % poly.length];
+          const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+          const onCut = b.cuts.some(([a, c]) => {
+            const dx = c[0] - a[0], dy = c[1] - a[1];
+            return Math.abs(dx * (my - a[1]) - dy * (mx - a[0])) / Math.hypot(dx, dy) < 0.004;
+          });
+          if (!onCut) continue;
+          ctx.strokeStyle = `rgba(255,${120 + 100 * b.hot},40,${Math.min(1, b.hot)})`;
+          ctx.lineWidth = 0.03;
+          ctx.beginPath();
+          ctx.moveTo(p[0], p[1]);
+          ctx.lineTo(q[0], q[1]);
+          ctx.stroke();
+          ctx.strokeStyle = `rgba(255,250,210,${Math.min(1, b.hot)})`;
+          ctx.lineWidth = 0.012;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  function setAblaze(b, secs) {
+    b.burnT = Math.max(b.burnT || 0, secs);
+    b.char = b.char || 0;
+  }
+
+  // A random point inside one of a body's polygons, in world space.
+  function pointOn(b) {
+    const polys = b.polys || bodyPolys(b);
+    const poly = pick(polys);
+    let x = 0, y = 0, tw = 0;
+    for (const p of poly) { const w = Math.random(); x += p[0] * w; y += p[1] * w; tw += w; }
+    return b.getWorldPoint(V(x / tw, y / tw));
+  }
+
+  function stepFlames(dt) {
+    for (const b of bodies) {
+      if (b.hot > 0) b.hot = Math.max(0, b.hot - dt * 0.35);
+      if (!(b.burnT > 0)) continue;
+      b.burnT -= dt;
+      b.char = Math.min(0.75, (b.char || 0) + dt * 0.1);
+      const rate = b.kind === 'desk' ? 40 : 14;
+      const n = Math.floor(rate * dt + Math.random());
+      for (let i = 0; i < n && flames.length < 260; i++) {
+        const p = pointOn(b);
+        flames.push({ x: p.x, y: p.y, vx: rand(-0.15, 0.15), vy: rand(-1.1, -0.5), t: 0, life: rand(0.35, 0.8), r: rand(0.03, 0.07) * clamp(b.burnT / 1.5, 0.2, 1) });
+      }
+      if (chance(dt * 6)) {
+        const p = pointOn(b);
+        smoke.push({ x: p.x, y: p.y - 0.1, r: rand(0.04, 0.07), t: 0, life: rand(1.8, 2.8), vx: rand(-0.08, 0.08), shade: rand(40, 70) });
+      }
+    }
+    for (const f of flames) {
+      f.t += dt;
+      f.x += (f.vx + Math.sin(clock * 9 + f.y * 20) * 0.15) * dt;
+      f.y += f.vy * dt;
+    }
+    flames = flames.filter((f) => f.t < f.life);
+    for (const p of booms) {
+      p.t += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 0.94;
+      p.vy = p.vy * 0.94 - 0.4 * dt;
+    }
+    booms = booms.filter((p) => p.t < p.life);
+    for (const r of rings) r.t += dt;
+    rings = rings.filter((r) => r.t < r.life);
+  }
+
+  function drawFlames() {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const f of flames) {
+      const k = f.t / f.life;
+      ctx.globalAlpha = (1 - k) * 0.9;
+      const c = k < 0.25 ? '#fff1a8' : k < 0.55 ? '#ffb33d' : '#ff5a1f';
+      ellipse(f.x, f.y, f.r * (1 - k * 0.5), f.r * (1.3 - k * 0.4), c, false);
+    }
+    for (const p of booms) {
+      const k = p.t / p.life;
+      ctx.globalAlpha = (1 - k) * 0.95;
+      const c = k < 0.2 ? '#fffbe0' : k < 0.45 ? '#ffd23f' : k < 0.7 ? '#ff8a2b' : '#c2410c';
+      ellipse(p.x, p.y, p.r * (0.6 + k * 0.8), p.r * (0.6 + k * 0.8), c, false);
+    }
+    ctx.restore();
+    for (const r of rings) {
+      const k = r.t / r.life;
+      ctx.globalAlpha = (1 - k) * 0.7;
+      ctx.beginPath();
+      ctx.ellipse(r.x, r.y, r.max * k, r.max * k * (r.flat || 1), 0, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 0.05 * (1 - k) + 0.01;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Blow everything away from (x, y).
+  function blast(x, y, power, radius) {
+    for (const b of bodies) {
+      const c = b.getWorldCenter();
+      const dx = c.x - x, dy = c.y - y;
+      const d = Math.hypot(dx, dy) + 0.15;
+      if (d > radius * 2.5) continue;
+      const m = b.getMass();
+      const k = power / (d + 0.3);
+      b.applyLinearImpulse(V((dx / d) * m * k, (dy / d) * m * k - m * k * 0.6), c, true);
+      b.setAngularVelocity(b.getAngularVelocity() + rand(-14, 14));
+      if (d < radius && b.breakable && b.breakable !== 'desk') b.hit = Math.max(b.hit || 0, 9);
+    }
+  }
+
+  function fireball(x, y, n, size) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(0.5, 4) * size;
+      booms.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.8, r: rand(0.08, 0.2) * size, t: -rand(0, 0.08), life: rand(0.5, 1.1) });
+    }
+    for (let i = 0; i < n / 2; i++) {
+      smoke.push({ x: x + rand(-0.3, 0.3) * size, y: y + rand(-0.3, 0.1) * size, r: rand(0.08, 0.16) * size, t: -rand(0.1, 0.5), life: rand(2, 3.5), vx: rand(-0.3, 0.3), shade: rand(50, 90) });
+    }
+  }
+
+  // ----- using a weapon -----
+
+  function useWeapon(id) {
+    if (state !== 'ready' || weapon || !has(id)) return;
+    releaseTilt();
+    startRound();
+    weaponRound = true;
+    updateScore();
+    const top = desk.getWorldPoint(V(0, -DESK_H));
+    weapon = { id, t: 0, x: top.x, y: top.y, fired: false, done: false };
+    if (id === 'sword') {
+      weapon.xt = rand(-0.12, 0.12);
+      weapon.xb = weapon.xt + rand(-0.15, 0.15);
+      sfx.whoosh(2.2);
+    } else if (id === 'grenade') {
+      weapon.from = chance(0.5) ? -1 : 1;
+      weapon.sx = weapon.from < 0 ? -0.3 : Wm + 0.3;
+      weapon.sy = floorY - 1.4;
+      weapon.tx = top.x + rand(-0.4, 0.4);
+      weapon.ty = top.y - 0.06;
+      weapon.ticks = 0;
+    } else if (id === 'laser') {
+      weapon.xt = rand(-0.2, 0.2);
+      weapon.xb = weapon.xt + rand(-0.25, 0.25);
+      weapon.side = top.x > Wm / 2 ? -1 : 1;
+      weapon.trail = [];
+      sfx.charge();
+    } else if (id === 'nuke') {
+      weapon.bx = desk.getWorldPoint(V(rand(-0.25, 0.25), 0)).x;
+      weapon.nextBeep = 0.6;
+      weapon.gap = 0.7;
+    }
+    showBank(false);
+  }
+
+  function updateWeapon(dt) {
+    if (!weapon) return;
+    const w = weapon;
+    w.t += dt;
+    if (!w.done) heldUntil = stateT;
+    if (w.id === 'sword') {
+      if (!w.fired && w.t >= 0.3) {
+        w.fired = true;
+        const pieces = splitDesk(halves(w.xt, w.xb), [[[w.xt, -3], [w.xb, 1]]]);
+        for (const p of pieces) {
+          const dir = Math.sign(p.getWorldCenter().x - w.x) || 1;
+          p.setLinearVelocity(V(dir * rand(1.6, 2.4), -rand(1.2, 2)));
+          p.setAngularVelocity(dir * rand(1, 2));
+          p.hot = 0.25;
+        }
+        for (const b of bodies) {
+          if (b.kind === 'desk') continue;
+          const c = b.getWorldCenter();
+          if (Math.abs(c.x - w.x) < 0.35) {
+            b.setLinearVelocity(V(Math.sign(c.x - w.x) * rand(1, 3), -rand(2, 4)));
+            if (b.breakable && b.breakable !== 'desk') b.hit = 9;
+          }
+        }
+        sparkBurst(w.x, w.y, 40);
+        sfx.clang();
+        shake = 1;
+      }
+      if (w.t > 1.2) w.done = true;
+    } else if (w.id === 'grenade') {
+      if (w.t > 0.7 && w.t < 1.9 && Math.floor((w.t - 0.7) / 0.28) >= w.ticks) {
+        w.ticks++;
+        sfx.tick();
+      }
+      if (!w.fired && w.t >= 1.9) {
+        w.fired = true;
+        const gx = w.tx, gy = w.ty;
+        const n = randInt(4, 5);
+        const xs = [];
+        for (let i = 1; i < n; i++) xs.push(-DESK_W / 2 + (DESK_W * i) / n + rand(-0.12, 0.12));
+        const cuts = xs.map((x) => [[x + rand(-0.2, 0.2), -3], [x + rand(-0.2, 0.2), 1]]);
+        const regions = [];
+        let prev = [[-5, -3], [-5, 1]];
+        for (const c of cuts.concat([[[5, -3], [5, 1]]])) {
+          regions.push([prev[0], c[0], c[1], prev[1]]);
+          prev = c;
+        }
+        const pieces = splitDesk(regions, cuts);
+        for (const p of pieces) p.hot = 0.6;
+        blast(gx, gy, 5.5, 1.3);
+        fireball(gx, gy, 46, 1.6);
+        sparkBurst(gx, gy, 90);
+        rings.push({ x: gx, y: gy, t: 0, life: 0.6, max: 3.2 });
+        for (const p of pieces) if (chance(0.5)) setAblaze(p, rand(1.5, 3));
+        w.flash = 1;
+        shake = 1.6;
+        sfx.boom(1);
+      }
+      if (w.flash) w.flash = Math.max(0, w.flash - dt * 5);
+      if (w.t > 3) w.done = true;
+    } else if (w.id === 'laser') {
+      const t0 = 0.85, t1 = 2.0;
+      if (w.t >= t0 && !w.beaming) { w.beaming = true; sfx.beam(t1 - t0); }
+      if (w.t >= t0 && w.t <= t1) {
+        const k = (w.t - t0) / (t1 - t0);
+        const lx = w.xt + (w.xb - w.xt) * k;
+        const ly = -DESK_H - 0.25 + (DESK_H + 0.3) * k;
+        const p = desk.getWorldPoint(V(lx, ly));
+        w.hitP = p;
+        w.trail.push({ x: p.x, y: p.y, t: 0 });
+        if (chance(0.7)) sparkBurst(p.x, p.y, 3);
+        if (chance(0.25)) smoke.push({ x: p.x, y: p.y, r: 0.04, t: 0, life: 1.6, vx: rand(-0.1, 0.1), shade: 60 });
+        if (chance(0.5)) flames.push({ x: p.x, y: p.y, vx: rand(-0.3, 0.3), vy: rand(-1, -0.4), t: 0, life: 0.4, r: 0.04 });
+        for (const b of bodies) {
+          if (b.kind === 'desk' || b.lasered) continue;
+          const c = b.getWorldCenter();
+          if (Math.hypot(c.x - p.x, c.y - p.y) < 0.18) {
+            b.lasered = true;
+            setAblaze(b, rand(3, 5));
+            if (b.breakable && b.breakable !== 'desk') b.hit = 9;
+          }
+        }
+        shake = Math.max(shake, 0.15);
+      }
+      for (const tr of w.trail) tr.t += dt;
+      if (!w.fired && w.t >= t1) {
+        w.fired = true;
+        w.hitP = null;
+        const pieces = splitDesk(halves(w.xt, w.xb + 0.05 * (w.xb - w.xt)), [[[w.xt, -DESK_H - 0.25], [w.xb, 0.05]]]);
+        for (const p of pieces) {
+          const dir = Math.sign(p.getWorldCenter().x - w.x) || 1;
+          p.setLinearVelocity(V(dir * rand(0.5, 1), -0.5));
+          p.setAngularVelocity(dir * rand(0.4, 0.9));
+          p.hot = 1.2;
+          setAblaze(p, 8);
+        }
+        sfx.zap();
+      }
+      if (w.t > 3) w.done = true;
+    } else if (w.id === 'nuke') {
+      const BOOM = 4.4;
+      if (w.t < BOOM && w.t >= w.nextBeep) {
+        sfx.beep(w.gap < 0.15);
+        w.lastBeep = w.t;
+        w.gap = Math.max(0.07, w.gap * 0.8);
+        w.nextBeep = w.t + w.gap;
+      }
+      if (!w.fired && w.t >= BOOM) {
+        w.fired = true;
+        sfx.nuke();
+      }
+      if (w.t >= 12.5 && state === 'flipped') {
+        w.done = true;
+        state = 'fadeout';
+        stateT = 0;
+        finishRound();
+      }
+    }
+  }
+
+  // The sword: a big blade swung down around a pivot above the desk.
+  function drawSword(w) {
+    const L = 1.75;
+    const px = w.x, py = floorY - L - 0.02;
+    const swing = Math.min(1, w.t / 0.3);
+    const ease = swing * swing * swing;
+    let a = -0.55 + (Math.PI / 2 + 0.55) * ease;
+    let alpha = 1, lift = 0;
+    if (w.t > 0.75) { lift = (w.t - 0.75) * 2.2; alpha = Math.max(0, 1 - (w.t - 0.75) * 2.2); }
+    if (alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(px, py - lift);
+    if (swing < 1) {
+      // a white streak along the blade's path
+      ctx.beginPath();
+      ctx.arc(0, 0, L * 0.82, a - 0.9 * swing, a);
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = L * 0.32;
+      ctx.stroke();
+    } else if (w.t < 0.55) {
+      ctx.beginPath();
+      ctx.arc(0, 0, L * 0.82, a - 0.5 * (1 - (w.t - 0.3) / 0.25), a);
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - (w.t - 0.3) / 0.25)})`;
+      ctx.lineWidth = L * 0.32;
+      ctx.stroke();
+    }
+    ctx.rotate(a);
+    // grip, pommel, crossguard
+    rrect(-0.36, -0.035, 0.34, 0.07, 0.02, '#5b3a2a');
+    for (let i = 0; i < 5; i++) line(-0.33 + i * 0.065, -0.035, -0.3 + i * 0.065, 0.035, '#3b2416', 0.01);
+    ellipse(-0.39, 0, 0.05, 0.05, '#e0b84a');
+    rrect(-0.03, -0.2, 0.06, 0.4, 0.02, '#e0b84a');
+    ellipse(0, 0, 0.035, 0.035, '#e66b6b');
+    // blade
+    const g = ctx.createLinearGradient(0, -0.07, 0, 0.07);
+    g.addColorStop(0, '#f4f6fa');
+    g.addColorStop(0.5, '#b9c2cf');
+    g.addColorStop(1, '#8a94a3');
+    poly([[0.03, -0.07], [L - 0.2, -0.06], [L, 0], [L - 0.2, 0.06], [0.03, 0.07]], g);
+    line(0.08, 0, L - 0.3, 0, 'rgba(90,100,115,0.6)', 0.014);
+    line(0.1, -0.045, L - 0.4, -0.04, 'rgba(255,255,255,0.8)', 0.008);
+    ctx.restore();
+  }
+
+  function drawGrenade(x, y, spin, blink) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(spin);
+    ellipse(0, 0, 0.055, 0.07, '#5d6b3a');
+    for (let i = -1; i <= 1; i++) line(-0.05, i * 0.025, 0.05, i * 0.025, 'rgba(0,0,0,0.25)', 0.006);
+    rrect(-0.02, -0.095, 0.04, 0.03, 0.006, '#9aa0aa');
+    poly([[0.015, -0.09], [0.06, -0.075], [0.055, -0.02], [0.04, -0.02], [0.045, -0.07]], '#9aa0aa');
+    if (blink) ellipse(0, 0.02, 0.012, 0.012, '#ff3b3b', false);
+    ctx.restore();
+  }
+
+  function drawLaser(w) {
+    const out = Math.min(1, w.t / 0.35) * (w.t > 2.4 ? Math.max(0, 1 - (w.t - 2.4) / 0.5) : 1);
+    if (out <= 0) return;
+    const bx = w.side > 0 ? -0.1 + out * 0.55 : Wm + 0.1 - out * 0.55;
+    const by = Math.max(0.6, floorY - 2.3);
+    const target = w.hitP || desk.getWorldPoint(V(w.xt, -DESK_H - 0.25));
+    const ang = Math.atan2(target.y - by, target.x - bx);
+    // scorch trail
+    for (const tr of w.trail) {
+      const a = Math.max(0, 1 - tr.t / 0.8);
+      if (a <= 0) continue;
+      ellipse(tr.x, tr.y, 0.02, 0.02, `rgba(255,${150 + 80 * a},60,${a})`, false);
+    }
+    ctx.save();
+    ctx.translate(bx, by);
+    // mount
+    rrect(-0.16 * w.side - 0.12, -0.12, 0.24, 0.24, 0.05, '#3b3a44');
+    ctx.rotate(ang);
+    rrect(-0.12, -0.09, 0.3, 0.18, 0.05, '#5b6170');
+    rrect(0.15, -0.05, 0.32, 0.1, 0.02, '#9aa0aa');
+    rrect(0.42, -0.07, 0.07, 0.14, 0.02, '#3b3a44');
+    for (let i = 0; i < 3; i++) rrect(0.2 + i * 0.07, -0.055, 0.03, 0.11, 0.008, '#4fb3bf', false);
+    // charging glow at the muzzle
+    const charge = w.t < 0.85 ? w.t / 0.85 : w.hitP ? 1 : 0.3;
+    ctx.globalCompositeOperation = 'lighter';
+    ellipse(0.5, 0, 0.04 + charge * 0.06 + Math.random() * 0.015, 0.04 + charge * 0.06, `rgba(255,60,90,${0.4 + charge * 0.5})`, false);
+    ellipse(0.5, 0, 0.02 + charge * 0.03, 0.02 + charge * 0.03, 'rgba(255,240,240,0.9)', false);
+    if (w.t < 0.85) {
+      for (let i = 0; i < 5; i++) {
+        const a = clock * 6 + i * 1.26;
+        const r = 0.25 * (1 - ((clock * 2 + i * 0.2) % 1));
+        ellipse(0.5 + Math.cos(a) * r, Math.sin(a) * r, 0.012, 0.012, 'rgba(255,120,140,0.9)', false);
+      }
+    }
+    ctx.restore();
+    if (w.hitP) {
+      const mx = bx + Math.cos(ang) * 0.5, my = by + Math.sin(ang) * 0.5;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      const wob = 1 + Math.random() * 0.3;
+      for (const [wd, col] of [[0.14 * wob, 'rgba(255,40,80,0.25)'], [0.07 * wob, 'rgba(255,60,90,0.6)'], [0.025, 'rgba(255,245,245,1)']]) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = wd;
+        ctx.beginPath();
+        ctx.moveTo(mx, my);
+        ctx.lineTo(w.hitP.x, w.hitP.y);
+        ctx.stroke();
+      }
+      ellipse(w.hitP.x, w.hitP.y, 0.09 * wob, 0.09 * wob, 'rgba(255,140,60,0.7)', false);
+      ellipse(w.hitP.x, w.hitP.y, 0.04, 0.04, 'rgba(255,255,230,1)', false);
+      ctx.restore();
+    }
+  }
+
+  function drawNukeBomb(w) {
+    if (w.t > 4.4) return;
+    const drop = Math.min(1, w.t / 0.35);
+    const y = floorY - (1 - drop * drop) * 2.5;
+    ctx.save();
+    ctx.translate(w.bx, y);
+    // fins, body, nose
+    poly([[-0.24, 0], [-0.3, -0.08], [-0.2, -0.08]], '#3b3a44');
+    rrect(-0.26, -0.2, 0.46, 0.2, 0.1, '#4a5a3a');
+    ellipse(0.2, -0.1, 0.07, 0.1, '#4a5a3a');
+    rrect(-0.15, -0.2, 0.025, 0.2, 0, '#e0b84a', false);
+    rrect(0.08, -0.2, 0.025, 0.2, 0, '#e0b84a', false);
+    // radiation symbol
+    ellipse(-0.03, -0.1, 0.06, 0.06, '#f2c94e');
+    ctx.fillStyle = '#1d1c22';
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-0.03, -0.1);
+      ctx.arc(-0.03, -0.1, 0.05, -Math.PI / 2 + i * 2.094 - 0.5, -Math.PI / 2 + i * 2.094 + 0.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ellipse(-0.03, -0.1, 0.014, 0.014, '#f2c94e', false);
+    // countdown readout and blinking light
+    rrect(0.03, -0.27, 0.16, 0.07, 0.01, '#1d1c22');
+    const left = Math.max(0, 4.4 - w.t);
+    ctx.fillStyle = '#ff3b3b';
+    ctx.font = 'bold 0.05px monospace';
+    ctx.fillText(`0:0${Math.ceil(left)}`, 0.045, -0.218);
+    const on = w.lastBeep != null && w.t - w.lastBeep < 0.06;
+    ellipse(-0.2, -0.22, 0.022, 0.022, on ? '#ff3b3b' : '#6b1f1f');
+    if (on) ellipse(-0.2, -0.22, 0.06, 0.06, 'rgba(255,60,60,0.35)', false);
+    ctx.restore();
+  }
+
+  // World-space weapon effects, drawn above the desk and items.
+  function drawWeaponWorld() {
+    drawFlames();
+    const w = weapon;
+    if (!w) return;
+    if (w.id === 'sword') drawSword(w);
+    else if (w.id === 'grenade' && !w.fired) {
+      const k = Math.min(1, w.t / 0.7);
+      const x = w.sx + (w.tx - w.sx) * k;
+      const y = w.sy + (w.ty - w.sy) * k - Math.sin(k * Math.PI) * 1.1;
+      const blink = w.t > 0.7 && (w.t * 4) % 1 < 0.4;
+      drawGrenade(x, y, k < 1 ? w.t * 14 : 0.3, blink);
+    } else if (w.id === 'laser') drawLaser(w);
+    else if (w.id === 'nuke') drawNukeBomb(w);
+  }
+
+  // Screen-space overlays: flashes, and the nuke's wide shot.
+  function drawWeaponScreen() {
+    const w = weapon;
+    if (!w) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (w.id === 'grenade' && w.flash > 0) {
+      ctx.globalAlpha = w.flash * 0.8;
+      ctx.fillStyle = '#fff8e0';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
+    if (w.id === 'nuke') {
+      if (w.t < 4.4 && w.lastBeep != null) {
+        // the room pulses red with each beep
+        const p = Math.max(0, 1 - (w.t - w.lastBeep) / 0.25) * Math.min(1, w.t / 4) * 0.25;
+        ctx.fillStyle = `rgba(255,30,30,${p})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+      if (w.t >= 4.4) {
+        if (w.t > 4.6) drawMushroom(w.t - 4.6);
+        // white out, then fade to reveal the wide shot
+        const white = w.t < 4.6 ? (w.t - 4.4) / 0.2 : Math.max(0, 1 - (w.t - 4.9) / 1.2);
+        if (white > 0) {
+          ctx.globalAlpha = Math.min(1, white);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, W, H);
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+  }
+
+  // The wide shot: a mushroom cloud rising over the horizon where the
+  // office used to be. t counts from the moment the white starts to clear.
+  function drawMushroom(t) {
+    const k = Math.min(1, t / 7);
+    const e = 1 - Math.pow(1 - k, 3);
+    const jx = t < 2 ? rand(-1, 1) * (2 - t) * 4 : 0;
+    const jy = t < 2 ? rand(-1, 1) * (2 - t) * 4 : 0;
+    const hz = H * 0.74;
+    const S = Math.min(W, H * 1.1);
+    ctx.save();
+    ctx.translate(jx, jy);
+    // sky, brightest at the horizon early on
+    const sky = ctx.createLinearGradient(0, 0, 0, hz);
+    sky.addColorStop(0, '#2b2140');
+    sky.addColorStop(0.6, k < 0.3 ? '#ff9a4d' : '#a8553a');
+    sky.addColorStop(1, k < 0.3 ? '#fff0b0' : '#f08a4b');
+    ctx.fillStyle = sky;
+    ctx.fillRect(-10, -10, W + 20, hz + 10);
+    // hills and the town skyline
+    ctx.fillStyle = '#3d2a3a';
+    ctx.beginPath();
+    ctx.moveTo(-10, hz);
+    for (let x = -10; x <= W + 10; x += W / 12) ctx.lineTo(x, hz - (Math.sin(x * 0.013) * 0.5 + 0.6) * H * 0.04);
+    ctx.lineTo(W + 10, hz);
+    ctx.fill();
+    ctx.fillStyle = '#2a1e2c';
+    for (let i = 0; i < 26; i++) {
+      const bx = W * 0.1 + (i * W * 0.8) / 26;
+      if (Math.abs(bx - W / 2) < S * 0.08 * (0.4 + e)) continue;   // flattened at ground zero
+      const bh = H * (0.015 + ((i * 37) % 11) * 0.004);
+      ctx.fillRect(bx, hz - bh, W * 0.022, bh);
+    }
+    ctx.fillStyle = '#2a1d24';
+    ctx.fillRect(-10, hz, W + 20, H - hz + 10);
+    // shockwave racing out along the ground
+    const sw = t * S * 0.9;
+    if (t < 3) {
+      ctx.strokeStyle = `rgba(255,255,255,${0.6 * (1 - t / 3)})`;
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.ellipse(W / 2, hz, sw, sw * 0.35, 0, Math.PI, Math.PI * 2);
+      ctx.stroke();
+    }
+    // base surge of dust
+    const baseW = S * (0.08 + 0.32 * e);
+    for (let i = 0; i < 16; i++) {
+      const u = i / 15 - 0.5;
+      const r = S * (0.025 + 0.03 * e) * (0.8 + 0.4 * Math.sin(i * 2.7));
+      ctx.fillStyle = `rgba(${150 - 40 * k},${110 - 30 * k},${90 - 20 * k},0.95)`;
+      ctx.beginPath();
+      ctx.arc(W / 2 + u * baseW * 2, hz - r * 0.5 + Math.sin(i + t) * 2, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // stem
+    const capY = hz - H * (0.12 + 0.32 * e);
+    const stemW = S * (0.03 + 0.03 * e);
+    for (let y = hz; y > capY; y -= stemW * 0.5) {
+      const u = (hz - y) / (hz - capY);
+      const glow = Math.max(0, 1 - k * 1.5) * (1 - u * 0.5);
+      ctx.fillStyle = `rgb(${Math.round(150 + 105 * glow)},${Math.round(100 + 90 * glow)},${Math.round(80 + 40 * glow)})`;
+      ctx.beginPath();
+      ctx.arc(W / 2 + Math.sin(y * 0.05 + t * 2) * stemW * 0.15, y, stemW * (0.75 + 0.2 * Math.sin(y * 0.11 + t)), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // condensation ring around the stem
+    if (k > 0.15) {
+      const rk = Math.min(1, (k - 0.15) / 0.5);
+      ctx.strokeStyle = `rgba(255,255,255,${0.55 * (1 - Math.max(0, k - 0.6) / 0.4)})`;
+      ctx.lineWidth = S * 0.012;
+      ctx.beginPath();
+      ctx.ellipse(W / 2, hz - (hz - capY) * 0.55, stemW * (1.5 + rk * 2.5), stemW * (0.35 + rk * 0.5), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // the cap: a churning ring of billows around a glowing core
+    const R = S * (0.06 + 0.12 * e);
+    const glow = Math.max(0, 1 - k * 1.3);
+    const core = ctx.createRadialGradient(W / 2, capY + R * 0.15, 0, W / 2, capY + R * 0.15, R * 1.2);
+    core.addColorStop(0, `rgba(255,${200 + 55 * glow},${120 + 100 * glow},1)`);
+    core.addColorStop(1, 'rgba(200,90,40,0)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.ellipse(W / 2, capY + R * 0.1, R * 1.2, R * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const billows = 26;
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < billows; i++) {
+        const a = (i / billows) * Math.PI * 2 + t * 0.25 * (pass ? -1 : 1);
+        const front = Math.sin(a) > 0;
+        if ((pass === 0) === front) continue;   // back half first
+        const bx = W / 2 + Math.cos(a) * R * 0.95;
+        const by = capY + Math.sin(a) * R * 0.38 - (front ? 0 : R * 0.1);
+        const r = R * (0.42 + 0.12 * Math.sin(i * 3.1 + t * 1.3));
+        const lit = Math.max(0, (Math.sin(a) + 0.3)) * glow;
+        const shade = front ? 1 : 0.8;
+        ctx.fillStyle = `rgb(${Math.round((140 + 115 * lit) * shade)},${Math.round((110 + 90 * lit) * shade)},${Math.round((100 + 40 * lit) * shade)})`;
+        ctx.beginPath();
+        ctx.arc(bx, by, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (pass === 0) {
+        // the top dome
+        for (let i = 0; i < 9; i++) {
+          const u = i / 8 - 0.5;
+          const r = R * (0.5 + 0.1 * Math.sin(i * 2.3 + t));
+          const lit = glow * (1 - Math.abs(u));
+          ctx.fillStyle = `rgb(${Math.round(150 + 105 * lit)},${Math.round(120 + 80 * lit)},${Math.round(110 + 30 * lit)})`;
+          ctx.beginPath();
+          ctx.arc(W / 2 + u * R * 1.3, capY - R * 0.35 - Math.cos(u * Math.PI) * R * 0.25, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    ctx.restore();
+    if (t > 3) {
+      ctx.globalAlpha = Math.min(1, (t - 3) / 1);
+      ctx.fillStyle = '#fff6e0';
+      ctx.font = `700 ${Math.round(Math.min(22, W / 22))}px ui-rounded, system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('The desk has been decommissioned.', W / 2, H * 0.9);
+      ctx.textAlign = 'start';
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  showBank(false);
+
   function addPoints(n, label, x, y) {
     if (DAMAGE[label]) logDamage(label);
+    // Weapon rounds still count the damage, but score nothing.
+    if (weaponRound) return;
     score += n;
     sfx.ding(n >= 500);
     popups.push({ x: clamp(x, 0.7, Wm - 0.7), y: Math.max(y, 1), text: `+${n} ${label}`, t: 0 });
@@ -3331,7 +4276,8 @@
   }
 
   function updateScore() {
-    if (state === 'ready' || state === 'fadein') {
+    arsenalEl.classList.toggle('busy', state !== 'ready');
+    if (state === 'ready' || state === 'fadein' || weaponRound) {
       scoreEl.classList.remove('show');
     } else {
       scoreEl.classList.add('show');
@@ -3349,6 +4295,8 @@
 
   function finishRound() {
     awardHang();
+    if (weaponRound) return;
+    bankPoints(score);
     if (score > best) {
       best = score;
       try { localStorage.setItem('flippydesk.best', String(best)); } catch (e) { /* storage blocked */ }
@@ -3388,6 +4336,7 @@
     trackHang(dt);
     trackBottles(dt);
     stepFx(dt);
+    stepFlames(dt);
     for (let i = confetti.length - 1; i >= 0; i--) {
       const c = confetti[i];
       c.vy += GRAVITY * 0.25 * dt;
@@ -3428,6 +4377,7 @@
     updateBoss(dt);
     updatePal(dt);
     updateGust(dt);
+    updateWeapon(dt);
     for (const p of popups) p.t += dt;
     popups = popups.filter((p) => p.t < 1.4);
     if (state === 'flipped' && !landed) hangEl.textContent = `hang time ${hang.toFixed(2)}s`;
@@ -3720,6 +4670,7 @@
       ctx.rotate(b.getAngle());
       b.draw();
       if (b.cracks && b.cracks.length) drawCracks(b);
+      if (b.char > 0 || b.hot > 0) drawScorch(b);
       ctx.restore();
     }
     for (const c of cats) drawCat(c);
@@ -3743,6 +4694,7 @@
     ctx.textAlign = 'start';
 
     drawFx();
+    drawWeaponWorld();
     for (const c of confetti) {
       ctx.save();
       ctx.translate(c.x, c.y);
@@ -3757,6 +4709,7 @@
       ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
       ctx.fill();
     }
+    drawWeaponScreen();
 
     if (fade > 0) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -3851,6 +4804,10 @@
       if (e.code === 'Escape') closeReport();
       return;
     }
+    if (!storeEl.hidden) {
+      if (e.code === 'Escape') closeStore();
+      return;
+    }
     if (e.target.closest && e.target.closest('button')) return;
     if (e.code === 'Space' || e.code === 'ArrowUp') {
       e.preventDefault();
@@ -3891,6 +4848,9 @@
     pal: () => { pal.due = 0; },
     gust: () => { gust.due = 0; },
     get dog() { return dog && dog.mode; },
+    weapon: (id) => useWeapon(id),
+    get cash() { return cash; },
+    set cash(n) { cash = n; saveBank(); showBank(false); },
     get arms() { return armJoints.map((a) => [a.broken ? 1 : 0, Math.round(a.max || 0)]); },
     get kinds() { return bodies.map((b) => b.kind); },
     get angles() { return bodies.filter((b) => b.kind === "arm" || b.item === "Monitor arm").map((b) => b.kind + ":" + b.getAngle().toFixed(3)); },

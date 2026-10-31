@@ -135,7 +135,7 @@ html, body {
   100% { opacity: 0; transform: translate(-50%, 0) scale(1); }
 }
 
-#damage {
+#damage, #shop {
   position: fixed;
   right: 10px;
   top: max(88px, calc(env(safe-area-inset-top) + 74px));
@@ -157,16 +157,17 @@ html, body {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-#damage .boom { font-size: 16px; }
-#damage.bump { animation: bump 0.35s ease-out; }
-#damage:focus-visible { outline: 2px solid #2a2733; }
+#damage .boom, #shop .boom { font-size: 16px; }
+#damage.bump, #shop.bump { animation: bump 0.35s ease-out; }
+#damage:focus-visible, #shop:focus-visible { outline: 2px solid #2a2733; }
+#shop { top: max(128px, calc(env(safe-area-inset-top) + 114px)); }
 @keyframes bump {
   0% { transform: scale(1); }
   40% { transform: scale(1.25); }
   100% { transform: scale(1); }
 }
 
-#report {
+#report, #store {
   position: fixed;
   inset: 0;
   display: flex;
@@ -176,8 +177,8 @@ html, body {
   background: rgba(20, 18, 26, 0.45);
   touch-action: pan-y;
 }
-#report[hidden] { display: none; }
-#report .card {
+#report[hidden], #store[hidden] { display: none; }
+#report .card, #store .card {
   position: relative;
   width: min(420px, 100%);
   max-height: min(80vh, 640px);
@@ -193,7 +194,7 @@ html, body {
   user-select: text;
   -webkit-user-select: text;
 }
-#report h2 { margin: 0 0 4px; font-size: 22px; font-weight: 800; }
+#report h2, #store h2 { margin: 0 0 4px; font-size: 22px; font-weight: 800; }
 #report .total { margin: 0 0 12px; font-size: 14px; font-weight: 600; opacity: 0.7; }
 #report table { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
 #report th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.55; padding: 0 0 6px; }
@@ -201,7 +202,7 @@ html, body {
 #report td { padding: 7px 0; border-top: 1px solid rgba(42, 39, 51, 0.12); font-weight: 600; }
 #report td.now { color: #c2410c; font-weight: 800; }
 #report .empty { margin: 8px 0 0; font-weight: 600; opacity: 0.6; }
-#report .close {
+#report .close, #store .close {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -236,3 +237,65 @@ html, body {
   box-sizing: border-box;
   transition: width 0.5s ease-out;
 }
+
+#store .bank { margin: 0 0 12px; font-size: 14px; font-weight: 600; opacity: 0.7; }
+#store ul { list-style: none; margin: 0; padding: 0; }
+#store li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(42, 39, 51, 0.12);
+}
+#store li .icon { font-size: 30px; width: 40px; text-align: center; flex: none; }
+#store li div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#store li b { font-size: 16px; font-weight: 800; }
+#store li span { font-size: 13px; font-weight: 600; opacity: 0.7; }
+#store li small { font-size: 12px; font-weight: 700; color: #c2410c; }
+#store li button {
+  flex: none;
+  min-width: 78px;
+  height: 36px;
+  padding: 0 12px;
+  border: 2px solid #2a2733;
+  border-radius: 999px;
+  background: #ffd84d;
+  color: #2a2733;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 3px 0 #2a2733;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+#store li button:active { transform: translateY(2px); box-shadow: 0 1px 0 #2a2733; }
+#store li button:disabled { background: rgba(42, 39, 51, 0.08); box-shadow: none; cursor: default; opacity: 0.6; transform: none; }
+#store li button.owned { background: #b8e3b0; opacity: 1; }
+
+/* Owned weapons, ready to use. */
+#arsenal {
+  position: fixed;
+  right: 10px;
+  top: max(170px, calc(env(safe-area-inset-top) + 156px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: opacity 0.3s;
+}
+#arsenal button {
+  width: 44px;
+  height: 44px;
+  border: 2px solid #2a2733;
+  border-radius: 14px;
+  background: #fffaf0;
+  box-shadow: 0 3px 0 #2a2733;
+  font-size: 22px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#arsenal button:active { transform: translateY(2px); box-shadow: 0 1px 0 #2a2733; }
+#arsenal.busy { opacity: 0.3; pointer-events: none; }
