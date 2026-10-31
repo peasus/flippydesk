@@ -307,6 +307,79 @@
 
   const widescreen = () => monitor(0.86, 0.32);
 
+  // A tower PC standing on the desk. A hard enough knock fries it.
+  function tower() {
+    const dark = chance(0.6);
+    const rgb = dark && chance(0.6) ? rand(0, 360) : null;
+    const shell = dark ? '#2f3340' : '#e8dcc0';
+    const trim = dark ? '#4a4f5c' : '#d9cdb0';
+    return {
+      w: 0.22,
+      place(x, y) {
+        let b;
+        b = addBody(x, y, [R(-0.1, -0.46, 0.2, 0.46)], () => {
+          rrect(-0.1, -0.46, 0.2, 0.46, 0.015, shell);
+          rrect(-0.08, -0.43, 0.16, 0.05, 0.006, trim);
+          line(-0.06, -0.405, 0.06, -0.405, dark ? '#1d1c22' : '#9a8f78', 0.008);
+          for (let i = 0; i < 7; i++) line(-0.06, -0.3 + i * 0.03, 0.06, -0.3 + i * 0.03, dark ? '#1d1c22' : '#c9bc9c', 0.008);
+          ellipse(0, -0.34, 0.016, 0.016, trim);
+          const on = !b.dead && (clock % 1.6) > 0.08;
+          ellipse(0.05, -0.34, 0.007, 0.007, b.dead ? '#3b3a44' : on ? '#7cff9c' : '#2e6b3c', false);
+          if (rgb != null && !b.dead) line(-0.085, -0.02, -0.085, -0.44, hsl(rgb + clock * 90, 90, 60), 0.008);
+          if (b.dead) {
+            line(-0.09, -0.2, 0.05, -0.12, 'rgba(20,18,26,0.6)', 0.01);
+            ellipse(0.02, -0.15, 0.03, 0.02, 'rgba(20,18,26,0.35)', false);
+          }
+        }, { kind: 'tower', density: 1.6 });
+        b.breakable = 'tower';
+      },
+    };
+  }
+
+  // A flat desktop case with a CRT perched on top.
+  function retroDesktop() {
+    const screen = crt();
+    return {
+      w: 0.56,
+      place(x, y) {
+        let b;
+        b = addBody(x, y, [R(-0.27, -0.12, 0.54, 0.12)], () => {
+          rrect(-0.27, -0.12, 0.54, 0.12, 0.012, '#e8dcc0');
+          rrect(-0.24, -0.1, 0.22, 0.03, 0.005, '#d9cdb0');
+          line(-0.22, -0.085, -0.04, -0.085, '#9a8f78', 0.006);
+          rrect(-0.24, -0.055, 0.22, 0.03, 0.005, '#d9cdb0');
+          for (let i = 0; i < 5; i++) line(0.05 + i * 0.03, -0.095, 0.05 + i * 0.03, -0.03, '#c9bc9c', 0.008);
+          ellipse(0.22, -0.06, 0.016, 0.016, '#d9cdb0');
+          ellipse(0.22, -0.095, 0.006, 0.006, b.dead ? '#3b3a44' : '#7cff9c', false);
+          label('TURBO', 0.22, -0.02, 0.014, '#e66b6b');
+        }, { kind: 'tower', density: 1.6 });
+        b.breakable = 'tower';
+        screen.place(x, y - 0.121);
+      },
+    };
+  }
+
+  // A computer built into the monitor, with a fat chin.
+  function allInOne() {
+    const hue = rand(0, 360);
+    const lines = screenLines();
+    const shell = pick(['#d7d9df', '#f4f4f6', '#2f3340', '#f2c9a5', '#b8dbe6']);
+    return {
+      w: 0.64,
+      place(x, y) {
+        const b = addBody(x, y, [R(-0.12, -0.025, 0.24, 0.025), R(-0.03, -0.17, 0.06, 0.15), R(-0.31, -0.6, 0.62, 0.44)], () => {
+          rrect(-0.03, -0.18, 0.06, 0.16, 0.01, '#b3b7c0');
+          rrect(-0.12, -0.025, 0.24, 0.025, 0.012, '#b3b7c0');
+          rrect(-0.31, -0.6, 0.62, 0.44, 0.03, shell);
+          screenFace(b, -0.29, -0.58, 0.58, 0.33, hue, lines);
+          ellipse(0, -0.205, 0.015, 0.015, 'rgba(42,39,51,0.25)', false);
+        }, { kind: 'computer' });
+        makeScreen(b, -0.29, -0.58, 0.58, 0.33);
+      },
+    };
+  }
+
+
   // One or two screens floating on arms from a pole clamped to the back of
   // the desk, with the keyboard tucked underneath. The clamp and each arm
   // hold until a hard enough yank snaps them.
@@ -1311,6 +1384,11 @@
     () => [monitor(), keyboard(), mouse()],
     () => [monitor(), keyboard(), mouse()],
     () => [widescreen(), keyboard(), mouse()],
+    () => [tower(), monitor(), keyboard(), mouse()],
+    () => [tower(), widescreen(), keyboard(), mouse()],
+    () => [tower(), monitor(0.5), monitor(0.5), keyboard()],
+    () => [retroDesktop(), keyboard(), mouse()],
+    () => [allInOne(), keyboard(), mouse()],
     () => [monitor(0.5), monitor(0.5), keyboard(), mouse()],
     () => [armSetup(1)],
     () => [armSetup(2)],
@@ -1372,6 +1450,8 @@
     popups = [];
     cats = [];
     confetti = [];
+    sparks = [];
+    smoke = [];
     grab = null;
     armJoints = [];
     world.on('post-solve', onPostSolve);
@@ -2391,6 +2471,12 @@
         lfo.stop(t + dur + 0.05);
         burst('lowpass', 300, 1, 0.15, dur * 0.8);
       },
+      // Electrical crackle: a fizz of noise with a buzzy hum underneath.
+      zap() {
+        if (!ready()) return;
+        for (let i = 0; i < 4; i++) burst('highpass', rand(3000, 6000), 1, 0.25, 0.05, i * rand(0.04, 0.08));
+        tone('sawtooth', 120, 0.08, 0.35, 0, 60);
+      },
       // Two quick startled yips.
       bark() {
         if (!ready()) return;
@@ -2502,6 +2588,12 @@
       else if (b.breakable === 'pot' && dv > 3.5) breakApart(b, 'pot', 'pot smashed');
       else if (b.breakable === 'acrylic' && dv > 4) breakApart(b, 'acrylic', 'patent revoked');
       else if (b.breakable === 'snowglobe' && dv > 3) breakApart(b, 'snowglobe', 'snow globe smashed');
+      else if (b.breakable === 'tower' && dv > 4 && !b.dead) {
+        b.dead = true;
+        fry(b, 0, -0.2, 30);
+        const c = b.getWorldCenter();
+        addPoints(300, 'PC fried', c.x, c.y);
+      }
       else if (b.breakable === 'lava' && dv > 3) breakApart(b, 'lava', 'lava lamp popped');
       else if (b.breakable === 'zen' && dv > 3 && b.sand) spillSand(b);
     }
@@ -2535,9 +2627,11 @@
       b.dead = true;
       sfx.shatter(1);
       spawnShards(b, s.x + s.w / 2, s.y + s.h / 2, randInt(4, 7), GLASS);
+      fry(b, s.x + s.w / 2, s.y + s.h / 2);
       addPoints(POINTS.screen, 'screen smashed', c.x, c.y);
     } else {
       sfx.crack();
+      sparkBurst(c.x, c.y, 6);
       addPoints(POINTS.crack, 'cracked', c.x, c.y);
     }
   }
@@ -2663,6 +2757,73 @@
     const v = b.getLinearVelocity();
     for (let i = 0; i < n; i++) {
       drops.push(Object.assign({ x: c.x + rand(-0.06, 0.06), y: c.y + rand(-0.05, 0.05), vx: v.x + rand(-2, 2), vy: v.y + rand(-2.5, 0.5), r: rand(0.01, 0.022) }, DIRT));
+    }
+  }
+
+  // ---------- sparks and smoke ----------
+  // Broken electronics spit sparks, then smoke for a while.
+
+  let sparks = [], smoke = [];
+
+  function sparkBurst(x, y, n, vx = 0, vy = 0) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(1.5, 5);
+      sparks.push({ x, y, vx: vx + Math.cos(a) * sp, vy: vy + Math.sin(a) * sp - 1.5, t: 0, life: rand(0.25, 0.6) });
+    }
+  }
+
+  // Fry a body: sparks now, and smoke from local point (lx, ly) for a few seconds.
+  function fry(b, lx, ly, n = 24) {
+    const p = b.getWorldPoint(V(lx, ly));
+    const v = b.getLinearVelocity();
+    sparkBurst(p.x, p.y, n, v.x * 0.5, v.y * 0.5);
+    b.smokeAt = [lx, ly];
+    b.smokeT = rand(3, 5);
+    sfx.zap();
+  }
+
+  function stepFx(dt) {
+    for (const b of bodies) {
+      if (!(b.smokeT > 0)) continue;
+      b.smokeT -= dt;
+      const p = b.getWorldPoint(V(b.smokeAt[0], b.smokeAt[1]));
+      if (chance(dt * 14)) smoke.push({ x: p.x + rand(-0.03, 0.03), y: p.y, r: rand(0.03, 0.05), t: 0, life: rand(1.6, 2.6), vx: rand(-0.08, 0.08), shade: rand(70, 120) });
+      if (chance(dt * 1.5)) sparkBurst(p.x, p.y, randInt(3, 7));
+    }
+    for (const s of sparks) {
+      s.t += dt;
+      s.vy += GRAVITY * 0.6 * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      if (s.y > floorY) { s.y = floorY; s.vy *= -0.3; s.vx *= 0.6; }
+    }
+    sparks = sparks.filter((s) => s.t < s.life);
+    for (const m of smoke) {
+      m.t += dt;
+      m.x += m.vx * dt;
+      m.y -= 0.35 * dt;
+      m.r += 0.07 * dt;
+    }
+    smoke = smoke.filter((m) => m.t < m.life);
+    if (smoke.length > 160) smoke.splice(0, smoke.length - 160);
+  }
+
+  function drawFx() {
+    for (const m of smoke) {
+      const k = m.t / m.life;
+      ctx.globalAlpha = Math.min(1, m.t * 5) * (1 - k) * 0.5;
+      ellipse(m.x, m.y, m.r, m.r * 0.85, `rgb(${m.shade},${m.shade},${m.shade + 8})`, false);
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'round';
+    for (const s of sparks) {
+      const k = s.t / s.life;
+      ctx.strokeStyle = k < 0.4 ? '#fffbe0' : k < 0.7 ? '#ffd23f' : '#ff8a2b';
+      ctx.lineWidth = 0.012 * (1 - k * 0.6);
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(s.x - s.vx * 0.02, s.y - s.vy * 0.02);
+      ctx.stroke();
     }
   }
 
@@ -2800,6 +2961,7 @@
 
     trackHang(dt);
     trackBottles(dt);
+    stepFx(dt);
     for (let i = confetti.length - 1; i >= 0; i--) {
       const c = confetti[i];
       c.vy += GRAVITY * 0.25 * dt;
@@ -3154,6 +3316,7 @@
     ctx.globalAlpha = 1;
     ctx.textAlign = 'start';
 
+    drawFx();
     for (const c of confetti) {
       ctx.save();
       ctx.translate(c.x, c.y);
