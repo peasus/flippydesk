@@ -99,6 +99,8 @@
   let ground, floorFix, shardCount = 0, pinnedT = 0;
   let score = 0, hang = 0, groundT = 0, landed = false, popups = [];
   let flips = 0, best = 0;
+  let mouseWorld = false;     // through the mouse hole
+  try { mouseWorld = localStorage.getItem('flippydesk.mouse') === '1'; } catch (e) { /* storage blocked */ }
   try {
     flips = parseInt(localStorage.getItem('flippydesk.flips'), 10) || 0;
     best = parseInt(localStorage.getItem('flippydesk.best'), 10) || 0;
@@ -146,8 +148,8 @@
 
   function buildDesk() {
     const style = pick(['legs', 'pedestal', 'pedestal', 'double', 'trestle', 'standing']);
-    const glassy = style !== 'pedestal' && style !== 'double' && chance(0.25);
-    const wood = glassy ? GLASS_TOP : pick(WOODS);
+    const glassy = !mouseWorld && style !== 'pedestal' && style !== 'double' && chance(0.25);
+    const wood = glassy ? GLASS_TOP : pick(mouseWorld ? MOUSE_WOODS : WOODS);
     const metal = pick(['#3b3a44', '#c9ccd3', '#2f3340']);
     const top = -DESK_H;
     const half = DESK_W / 2;
@@ -207,6 +209,7 @@
       for (const x of legs) rrect(x, -legH - 0.01, 0.07, legH + 0.01, 0.01, legColor);
       peds.forEach((x, i) => {
         rrect(x, -legH - 0.01, 0.45, legH + 0.01, 0.01, wood.side);
+        if (wood.holes) cheeseHoles(x, -legH, 0.45, legH, 6, 1.9 + i);
       });
       for (const d of slots) {
         if (d.out) rrect(d.x, d.y, d.w, d.h, 0.012, 'rgba(20,18,26,0.75)');
@@ -219,6 +222,7 @@
       ctx.clip();
       line(-half + 0.1, top + 0.025, half - 0.6, top + 0.025, wood.grain, 0.008);
       line(-half + 0.5, top + 0.045, half - 0.1, top + 0.045, wood.grain, 0.008);
+      if (wood.holes) cheeseHoles(-half, top, DESK_W, DESK_TOP_T, 14, 1.1);
       ctx.restore();
       if (columns.length) {
         // the up/down buttons
@@ -280,7 +284,8 @@
     rrect(x, y, w, h, 0.012, g, false);
     const k = h / 0.32;
     rrect(x + 0.05 * k, y + 0.04 * k, Math.min(0.32 * k, w * 0.6), 0.23 * k, 0.012, 'rgba(255,255,255,0.88)', false);
-    lines.forEach(([a, c], i) => line(x + 0.07 * k + a * k, y + 0.07 * k + i * 0.033 * k, x + 0.07 * k + (a + c * 0.8) * k, y + 0.07 * k + i * 0.033 * k, hsl(hue + i * 40, 55, 50), 0.012 * k));
+    if (mouseWorld) cheeseIcon(x + 0.05 * k + Math.min(0.32 * k, w * 0.6) / 2, y + 0.155 * k, 0.07 * k);
+    else lines.forEach(([a, c], i) => line(x + 0.07 * k + a * k, y + 0.07 * k + i * 0.033 * k, x + 0.07 * k + (a + c * 0.8) * k, y + 0.07 * k + i * 0.033 * k, hsl(hue + i * 40, 55, 50), 0.012 * k));
     ellipse(x + w - 0.12 * k, y + h - 0.1 * k, 0.035 * k, 0.035 * k, 'rgba(255,255,255,0.35)', false);
   }
 
@@ -1553,6 +1558,301 @@
     };
   }
 
+  // ---------- mouse world items ----------
+  // Through the mouse hole, the desk is stocked for its new tenants.
+
+  const CHEESE = '#f7c843';
+  const CHEESE_RIND = '#e9a92c';
+  const CRUMBS = { color: '#f7c843', stain: 'rgba(247,200,67,0.8)' };
+
+  // Holes in a slab of cheese, at fixed spots so they don't jump around.
+  function cheeseHoles(x, y, w, h, n, seed = 1) {
+    for (let i = 0; i < n; i++) {
+      const u = ((i + 1) * 0.618 * seed) % 1, v = ((i + 1) * 0.383 * seed + 0.2) % 1;
+      const r = Math.min(w, h) * (0.08 + ((i * 7) % 5) * 0.025);
+      ellipse(x + r + u * (w - 2 * r), y + r + v * (h - 2 * r), r, r * 0.85, 'rgba(200,130,20,0.45)', false);
+    }
+  }
+
+  function cheeseWedge() {
+    const w = rand(0.2, 0.26), h = rand(0.1, 0.14);
+    const pts = [[-w / 2, 0], [w / 2, 0], [w / 2, -h * 0.35], [-w / 2, -h]];
+    return {
+      w,
+      place(x, y) {
+        const draw = () => {
+          poly(pts, CHEESE);
+          poly([[-w / 2, -h], [w / 2, -h * 0.35], [w / 2, -h * 0.35 - 0.02], [-w / 2, -h - 0.02]], '#fbe08a');
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          for (const p of pts) ctx.lineTo(p[0], p[1]);
+          ctx.clip();
+          cheeseHoles(-w / 2, -h, w, h, 5, 1.3);
+          ctx.restore();
+        };
+        const b = addBody(x, y, [{ pts: pts.concat([[-w / 2, -h - 0.02], [w / 2, -h * 0.35 - 0.02]]) }], draw, { kind: 'cheese', density: 0.7 });
+        b.breakable = 'cheese';
+        b.shatter = () => {
+          const c = b.getWorldCenter();
+          const v = b.getLinearVelocity();
+          for (let i = 0; i < 18; i++) drops.push(Object.assign({ x: c.x, y: c.y, vx: v.x + rand(-2, 2), vy: v.y + rand(-3, 0), r: rand(0.008, 0.016) }, CRUMBS));
+          const left = [[-w / 2, 0], [0, 0], [0, -h * 0.68], [-w / 2, -h]];
+          const right = [[0, 0], [w / 2, 0], [w / 2, -h * 0.35], [0, -h * 0.68]];
+          splitBody(b, [
+            { parts: [{ pts: left }], draw: () => { poly(left, CHEESE); cheeseHoles(-w / 2, -h * 0.9, w / 2, h * 0.8, 2, 1.3); } },
+            { parts: [{ pts: right }], draw: () => { poly(right, CHEESE); cheeseHoles(0, -h * 0.6, w / 2, h * 0.5, 2, 2.1); } },
+          ]);
+        };
+      },
+    };
+  }
+
+  // A wheel of cheese in red wax, standing on edge. It rolls.
+  function cheeseWheel() {
+    const r = rand(0.08, 0.1);
+    const wax = pick(['#d94a4a', '#e0b84a', '#7cc58f']);
+    return {
+      w: r * 2,
+      place(x, y) {
+        addBody(x, y - r, [{ x: 0, y: 0, r }], () => {
+          ellipse(0, 0, r, r, wax);
+          ellipse(0, 0, r * 0.62, r * 0.62, 'rgba(255,255,255,0.18)', false);
+          rrect(-r * 0.45, -r * 0.18, r * 0.9, r * 0.36, r * 0.1, '#fff6e0');
+          label(wax === '#d94a4a' ? 'GOUDA' : wax === '#7cc58f' ? 'BRIE' : 'EDAM', 0, r * 0.06, r * 0.22, INK);
+        }, { kind: 'wheel', density: 0.9, friction: 0.6 });
+      },
+    };
+  }
+
+  function swissBlock() {
+    const w = rand(0.16, 0.22), h = rand(0.12, 0.17);
+    return {
+      w,
+      place(x, y) {
+        const b = addBody(x, y, [R(-w / 2, -h, w, h)], () => {
+          rrect(-w / 2, -h, w, h, 0.012, CHEESE);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(-w / 2, -h, w, h);
+          ctx.clip();
+          cheeseHoles(-w / 2, -h, w, h, 6, 1.7);
+          ellipse(-w / 2, -h * 0.5, h * 0.18, h * 0.18, 'rgba(200,130,20,0.45)', false);
+          ctx.restore();
+        }, { kind: 'cheese', density: 0.7 });
+        b.breakable = 'cheese';
+        b.shatter = () => {
+          const c = b.getWorldCenter();
+          const v = b.getLinearVelocity();
+          for (let i = 0; i < 18; i++) drops.push(Object.assign({ x: c.x, y: c.y, vx: v.x + rand(-2, 2), vy: v.y + rand(-3, 0), r: rand(0.008, 0.016) }, CRUMBS));
+          splitBody(b, [
+            { parts: [R(-w / 2, -h, w / 2, h)], draw: () => { rrect(-w / 2, -h, w / 2, h, 0.01, CHEESE); cheeseHoles(-w / 2, -h, w / 2, h, 2, 1.7); } },
+            { parts: [R(0, -h, w / 2, h)], draw: () => { rrect(0, -h, w / 2, h, 0.01, CHEESE); cheeseHoles(0, -h, w / 2, h, 3, 2.3); } },
+          ]);
+        };
+      },
+    };
+  }
+
+  // A thimble of tea. It spills like a mug but doesn't break.
+  function thimble() {
+    const pts = [[-0.055, 0], [0.055, 0], [0.045, -0.12], [-0.045, -0.12]];
+    return {
+      w: 0.13,
+      place(x, y) {
+        const b = addBody(x, y, [{ pts }], () => {
+          poly(pts, '#c9ccd3');
+          ctx.fillStyle = 'rgba(90,95,110,0.45)';
+          for (let r = 0; r < 4; r++) {
+            for (let k = 0; k < 5; k++) {
+              ctx.beginPath();
+              ctx.arc(-0.03 + k * 0.015 + (r % 2) * 0.007, -0.1 + r * 0.02, 0.004, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          rrect(-0.058, -0.02, 0.116, 0.02, 0.006, '#b0b4bd');
+          if (state === 'ready' && b.coffee > 0) {
+            ctx.globalAlpha = 0.5;
+            for (let i = -1; i <= 1; i += 2) {
+              ctx.beginPath();
+              for (let k = 0; k <= 8; k++) {
+                const t = k / 8;
+                const xx = i * 0.018 + Math.sin(t * 6 + clock * 4 + i) * 0.01;
+                if (k === 0) ctx.moveTo(xx, -0.13 - t * 0.1); else ctx.lineTo(xx, -0.13 - t * 0.1);
+              }
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 0.008;
+              ctx.lineCap = 'round';
+              ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+          }
+        }, { kind: 'mug', density: 1.4 });
+        b.coffee = 0.6;
+      },
+    };
+  }
+
+  function spool() {
+    const thread = pick(['#e66b6b', '#6b8fe6', '#7cc58f', '#b48be0', '#f08a4b']);
+    return {
+      w: 0.13,
+      place(x, y) {
+        addBody(x, y, [R(-0.065, -0.025, 0.13, 0.025), R(-0.045, -0.16, 0.09, 0.135), R(-0.065, -0.185, 0.13, 0.025)], () => {
+          rrect(-0.045, -0.165, 0.09, 0.145, 0.01, thread);
+          for (let yy = -0.15; yy < -0.03; yy += 0.016) line(-0.045, yy, 0.045, yy + 0.008, 'rgba(0,0,0,0.12)', 0.005);
+          rrect(-0.065, -0.025, 0.13, 0.025, 0.008, '#d8b07a');
+          rrect(-0.065, -0.185, 0.13, 0.025, 0.008, '#d8b07a');
+          line(0.045, -0.06, 0.09, -0.005, thread, 0.008);
+        }, { kind: 'spool', density: 0.8 });
+      },
+    };
+  }
+
+  function sugarCube() {
+    return {
+      w: 0.08,
+      place(x, y) {
+        addBody(x, y, [R(-0.04, -0.075, 0.08, 0.075)], () => {
+          rrect(-0.04, -0.075, 0.08, 0.075, 0.008, '#fbfbf7');
+          ctx.fillStyle = 'rgba(0,0,0,0.08)';
+          for (let i = 0; i < 9; i++) ctx.fillRect(-0.03 + ((i * 0.37) % 1) * 0.06, -0.065 + ((i * 0.61) % 1) * 0.055, 0.006, 0.006);
+        }, { kind: 'sugar', density: 0.6 });
+      },
+    };
+  }
+
+  function acorn() {
+    return {
+      w: 0.1,
+      place(x, y) {
+        addBody(x, y - 0.06, [{ x: 0, y: 0.005, r: 0.045 }], () => {
+          ellipse(0, 0.01, 0.04, 0.05, '#c98a4b');
+          ellipse(-0.012, 0.0, 0.01, 0.018, 'rgba(255,255,255,0.3)', false);
+          ctx.beginPath();
+          ctx.ellipse(0, -0.02, 0.05, 0.035, 0, Math.PI, Math.PI * 2);
+          ctx.closePath();
+          finish('#7a5232');
+          line(-0.03, -0.035, 0.03, -0.035, 'rgba(0,0,0,0.25)', 0.006);
+          line(0, -0.055, 0.012, -0.08, '#5b3a2a', 0.012);
+        }, { kind: 'acorn', density: 0.8 });
+      },
+    };
+  }
+
+  // A big sewing button, standing on edge. Also rolls.
+  function sewingButton() {
+    const color = pick(['#e66b6b', '#6b8fe6', '#f2c14e', '#7cc58f', '#3b3a44']);
+    return {
+      w: 0.14,
+      place(x, y) {
+        addBody(x, y - 0.07, [{ x: 0, y: 0, r: 0.07 }], () => {
+          ellipse(0, 0, 0.07, 0.07, color);
+          ellipse(0, 0, 0.052, 0.052, 'rgba(0,0,0,0.12)', false);
+          for (const [a, c] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) ellipse(a * 0.018, c * 0.018, 0.009, 0.009, 'rgba(30,25,35,0.7)', false);
+        }, { kind: 'button', density: 0.9, friction: 0.5 });
+      },
+    };
+  }
+
+  // A birthday candle stuck in a bottle cap: the mouse desk lamp.
+  function candleLamp() {
+    const wax = pick(['#e66b6b', '#6b8fe6', '#f2a7b5', '#7cc58f']);
+    return {
+      w: 0.12,
+      place(x, y) {
+        addBody(x, y, [R(-0.055, -0.035, 0.11, 0.035), R(-0.012, -0.2, 0.024, 0.165)], () => {
+          rrect(-0.012, -0.2, 0.024, 0.17, 0.006, '#fff');
+          for (let k = 0; k < 4; k++) line(-0.012, -0.18 + k * 0.04, 0.012, -0.165 + k * 0.04, wax, 0.01);
+          rrect(-0.055, -0.035, 0.11, 0.035, 0.008, '#c9ccd3');
+          for (let k = -2; k <= 2; k++) line(k * 0.022, -0.035, k * 0.022, 0, 'rgba(0,0,0,0.2)', 0.005);
+          line(0, -0.2, 0, -0.215, INK, 0.005);
+          const f = 1 + Math.sin(clock * 17) * 0.12;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ellipse(0, -0.235, 0.05 * f, 0.05 * f, 'rgba(255,200,90,0.18)', false);
+          ctx.restore();
+          ellipse(0, -0.235, 0.012, 0.024 * f, '#ffb33d', false);
+          ellipse(0, -0.228, 0.006, 0.012, '#fff1a8', false);
+        }, { kind: 'candle', density: 0.8 });
+      },
+    };
+  }
+
+  function strawberry() {
+    return {
+      w: 0.11,
+      place(x, y) {
+        addBody(x, y, [{ pts: [[-0.05, -0.1], [0.05, -0.1], [0.035, -0.03], [0, 0], [-0.035, -0.03]] }], () => {
+          poly([[-0.052, -0.095], [0, -0.108], [0.052, -0.095], [0.04, -0.035], [0, 0], [-0.04, -0.035]], '#e04a55');
+          ctx.fillStyle = '#ffe08a';
+          for (let i = 0; i < 9; i++) ctx.fillRect(-0.03 + ((i * 0.43) % 1) * 0.06, -0.085 + ((i * 0.71) % 1) * 0.06, 0.006, 0.008);
+          poly([[-0.04, -0.1], [-0.015, -0.118], [0, -0.1], [0.015, -0.118], [0.04, -0.1], [0, -0.09]], '#5fae5b');
+        }, { kind: 'berry', density: 0.6 });
+      },
+    };
+  }
+
+  function matchbox() {
+    const color = pick(['#d94a4a', '#3d6bb3', '#2f8a5b']);
+    return {
+      w: 0.22,
+      place(x, y) {
+        addBody(x, y, [R(-0.11, -0.08, 0.22, 0.08)], () => {
+          rrect(-0.11, -0.08, 0.22, 0.08, 0.008, color);
+          rrect(-0.11, -0.08, 0.22, 0.016, 0.004, '#6b4a33');
+          rrect(-0.07, -0.058, 0.14, 0.05, 0.006, '#fff6e0');
+          label('MATCHES', 0, -0.026, 0.02, color);
+        }, { kind: 'matchbox', density: 0.5 });
+      },
+    };
+  }
+
+  function peanut() {
+    return {
+      w: 0.13,
+      place(x, y) {
+        addBody(x, y - 0.035, [{ x: -0.03, y: 0, r: 0.035 }, { x: 0.03, y: 0, r: 0.035 }], () => {
+          ellipse(-0.03, 0, 0.037, 0.035, '#d9b07a');
+          ellipse(0.03, 0, 0.037, 0.035, '#d9b07a');
+          ctx.save();
+          ctx.globalAlpha = 0.25;
+          for (let k = -2; k <= 2; k++) line(k * 0.02, -0.03, k * 0.02, 0.03, '#7a5232', 0.004);
+          ctx.restore();
+        }, { kind: 'peanut', density: 0.6 });
+      },
+    };
+  }
+
+  // Baited and set. Flip the desk and it snaps shut.
+  function mousetrap() {
+    return {
+      w: 0.24,
+      place(x, y) {
+        const b = addBody(x, y, [R(-0.12, -0.025, 0.24, 0.025)], () => {
+          rrect(-0.12, -0.025, 0.24, 0.025, 0.006, '#d8b07a');
+          line(-0.11, -0.012, 0.11, -0.012, 'rgba(120,80,40,0.35)', 0.004);
+          if (b.sprung) {
+            line(-0.05, -0.03, 0.09, -0.03, '#9aa0aa', 0.012);
+          } else {
+            line(-0.05, -0.03, -0.11, -0.1, '#9aa0aa', 0.012);
+            line(-0.11, -0.1, -0.11, -0.03, '#9aa0aa', 0.008);
+            poly([[0.04, -0.025], [0.09, -0.025], [0.09, -0.05]], CHEESE);
+          }
+          ellipse(-0.05, -0.028, 0.012, 0.012, '#9aa0aa');
+        }, { kind: 'trap', density: 0.6 });
+        b.breakable = 'trap';
+      },
+    };
+  }
+
+  // A mouse-sized monitor screen shows cheese, of course.
+  function cheeseIcon(x, y, s) {
+    poly([[x - s, y + s * 0.6], [x + s, y + s * 0.6], [x + s, y - s * 0.1], [x - s, y - s * 0.6]], CHEESE, false);
+    ellipse(x - s * 0.4, y + s * 0.1, s * 0.16, s * 0.16, CHEESE_RIND, false);
+    ellipse(x + s * 0.4, y + s * 0.25, s * 0.12, s * 0.12, CHEESE_RIND, false);
+  }
+
   // ---------- item names ----------
   // Every body an item creates is tagged with the item's name, so the
   // damage report can count what was flipped and what got broken.
@@ -1609,6 +1909,19 @@
   calculator = named('Calculator', calculator);
   waterGlass = named('Glass of water', waterGlass);
   fishbowl = named('Fishbowl', fishbowl);
+  cheeseWedge = named('Cheese wedge', cheeseWedge);
+  cheeseWheel = named('Cheese wheel', cheeseWheel);
+  swissBlock = named('Swiss cheese', swissBlock);
+  thimble = named('Thimble of tea', thimble);
+  spool = named('Spool of thread', spool);
+  sugarCube = named('Sugar cube', sugarCube);
+  acorn = named('Acorn', acorn);
+  sewingButton = named('Button', sewingButton);
+  candleLamp = named('Candle lamp', candleLamp);
+  strawberry = named('Strawberry', strawberry);
+  matchbox = named('Matchbox', matchbox);
+  peanut = named('Peanut', peanut);
+  mousetrap = named('Mousetrap', mousetrap);
 
   // Swag unlocks as the flip count grows; each new item is guaranteed a spot
   // on the next desk.
@@ -1671,11 +1984,26 @@
   const EXTRAS = [lamp, pencilCup, duck, globe, sodaCan, alarmClock, stickyPad, photoFrame, plant, bookStack, mug,
     stapler, tapeDispenser, deskFan, deskPhone, headphones, tissueBox, banana, calculator, waterGlass, fishbowl];
 
+  const MOUSE_EXTRAS = [cheeseWedge, cheeseWheel, swissBlock, spool, sugarCube, acorn, sewingButton, candleLamp,
+    strawberry, matchbox, peanut, mousetrap, mousetrap];
+
+  function buildMouseItems() {
+    const extras = [];
+    extras.push(chance(0.6) ? cheeseWedge() : swissBlock());
+    if (chance(0.8)) extras.push(thimble());
+    if (chance(0.5)) extras.push(candleLamp());
+    for (const make of shuffle(MOUSE_EXTRAS.slice()).slice(0, randInt(2, 4))) extras.push(make());
+    return shuffle(extras);
+  }
+
   function buildItems() {
     const deskTop = floorY - DESK_H - 0.001;
     const comp = pick(COMPUTERS)();
     if (chance(0.5)) comp.reverse();
-    const extras = [];
+    const extras = mouseWorld ? buildMouseItems() : [];
+    if (mouseWorld) {
+      // no cats, no swag: the mice have their own things
+    } else {
     if (chance(0.9)) extras.push(mug());
     if (chance(0.85)) extras.push(chance(0.5) ? bookStack() : booksUpright());
     if (chance(0.85)) extras.push(plant());
@@ -1689,6 +2017,7 @@
     if (freshUnlock) {
       extras.unshift(freshUnlock.make());
       freshUnlock = null;
+    }
     }
 
     const GAP = 0.015;
@@ -1786,7 +2115,7 @@
   let dog = null;
 
   function placeDog() {
-    dog = chance(0.4) ? {
+    dog = !mouseWorld && chance(0.4) ? {
       x: clamp(cx + rand(-0.9, 0.9), 0.4, Wm - 0.4),
       dir: chance(0.5) ? 1 : -1,
       coat: pick(DOG_COATS),
@@ -2081,7 +2410,7 @@
   function updateBoss(dt) {
     boss.t += dt;
     if (boss.mode === 'away' && state === 'ready' && idleT > BOSS_IDLE) {
-      Object.assign(boss, { mode: 'in', t: 0, line: pick(BOSS_LINES), said: false, talkT: 0, look: pick(BOSS_LOOKS) });
+      Object.assign(boss, { mode: 'in', t: 0, line: pick(bossLines()), said: false, talkT: 0, look: pick(mouseWorld ? MOUSE_BOSS_LOOKS : BOSS_LOOKS) });
     }
     if (boss.mode === 'in') {
       const was = boss.slide;
@@ -2092,7 +2421,7 @@
         sfx.mumble(boss.line.split(' ').length, boss.look.pitch);
       }
       if (boss.talkT > 5) {
-        boss.line = pick(BOSS_LINES.filter((l) => l !== boss.line));
+        boss.line = pick(bossLines().filter((l) => l !== boss.line));
         boss.talkT = 0;
         boss.said = false;
       }
@@ -2103,6 +2432,8 @@
     }
     if (boss.mode === 'in' && state !== 'ready') bossFlee();
   }
+
+  const bossLines = () => (mouseWorld ? MOUSE_BOSS_LINES : BOSS_LINES);
 
   function bossFlee() {
     if (boss.mode !== 'in') return;
@@ -2133,6 +2464,8 @@
   const pal = { mode: 'away', slide: 0, due: Infinity, line: '', talkT: 0, look: PAL_LOOKS[0] };
 
   // Called for each new desk: rarely, the coworker is coming.
+  const palLines = () => (mouseWorld ? MOUSE_PAL_LINES : PAL_LINES);
+
   function schedulePal() {
     pal.due = chance(0.12) ? rand(1.5, 3) : Infinity;
   }
@@ -2140,17 +2473,17 @@
   function updatePal(dt) {
     if (pal.mode === 'away' && state === 'ready' && idleT > pal.due) {
       pal.due = Infinity;
-      Object.assign(pal, { mode: 'in', line: pick(PAL_LINES), talkT: -0.4, said: false, look: pick(PAL_LOOKS) });
+      Object.assign(pal, { mode: 'in', line: pick(palLines()), talkT: -0.4, said: false, look: pick(mouseWorld ? MOUSE_PAL_LOOKS : PAL_LOOKS) });
     }
     if (pal.mode === 'in') {
       pal.slide = Math.min(1, pal.slide + dt * 1.6);
       pal.talkT += dt;
       if (pal.talkT > 0 && !pal.said) {
         pal.said = true;
-        sfx.mumble(Math.min(12, pal.line.split(' ').length + 3), 1.3);
+        sfx.mumble(Math.min(12, pal.line.split(' ').length + 3), mouseWorld ? 2.4 : 1.3);
       }
       if (pal.talkT > 3.6) {
-        pal.line = pick(PAL_LINES.filter((l) => l !== pal.line));
+        pal.line = pick(palLines().filter((l) => l !== pal.line));
         pal.talkT = 0;
         pal.said = false;
       }
@@ -2175,6 +2508,7 @@
     const bob = pal.mode === 'in' ? Math.sin(clock * 9) * 0.008 : -0.05;
     ctx.save();
     ctx.translate(x, floorY + bob);
+    if (mouseWorld) drawTail(-1, Math.sin(clock * 4) * 0.05);
     // hair hangs down the back, behind everything
     rrect(-0.17, -1.62, 0.22, 0.5, 0.09, L.hair);
     // legs and sneakers
@@ -2193,6 +2527,11 @@
     rrect(0.36, -1.2, 0.08, 0.15, 0.015, '#1d1c22');
     rrect(0.37, -1.19, 0.06, 0.12, 0.008, pal.talkT % 0.8 < 0.4 ? '#f2c14e' : '#6b8fe6', false);
     ellipse(0.39, -1.05, 0.03, 0.025, L.skin);
+    if (mouseWorld) {
+      drawMouseHead(0.02, -1.5, L.skin, { open: pal.mode === 'in' && Math.sin(clock * 14) > 0 });
+      ctx.restore();
+      return;
+    }
     // head: big grin, eyebrows up
     ellipse(0, -1.5, 0.13, 0.15, L.skin);
     ctx.beginPath();
@@ -2260,7 +2599,7 @@
     if (gust.mode === 'away' && state === 'ready' && idleT > gust.due) {
       gust.due = Infinity;
       gust.dir = chance(0.5) ? 1 : -1;
-      Object.assign(gust, { mode: 'walk', t: 0, x: gust.dir > 0 ? -0.4 : Wm + 0.4, look: pick(PAL_LOOKS), tooted: false });
+      Object.assign(gust, { mode: 'walk', t: 0, x: gust.dir > 0 ? -0.4 : Wm + 0.4, look: pick(mouseWorld ? MOUSE_PAL_LOOKS : PAL_LOOKS), tooted: false });
     }
     if (gust.mode !== 'walk') return;
     gust.t += dt;
@@ -2288,9 +2627,12 @@
     line(-0.05, -0.75, -0.05 + step * 0.12, -0.03, L.pants, 0.08);
     line(0.05, -0.75, 0.05 - step * 0.12, -0.03, INK, 0.11);
     line(0.05, -0.75, 0.05 - step * 0.12, -0.03, L.pants, 0.08);
+    if (mouseWorld) drawTail(-1, step * 0.05);
     rrect(-0.17, -1.34, 0.34, 0.62, 0.09, L.hoodie);
     line(0, -1.25, -step * 0.12, -0.85, INK, 0.1);
     line(0, -1.25, -step * 0.12, -0.85, L.hoodie, 0.07);
+    if (mouseWorld) drawMouseHead(0.01, -1.48, L.skin, { twitch: true });
+    else {
     ellipse(0.01, -1.48, 0.12, 0.14, L.skin);
     ctx.beginPath();
     ctx.ellipse(0, -1.53, 0.125, 0.1, 0, Math.PI, Math.PI * 2);
@@ -2300,6 +2642,7 @@
     ellipse(0.05, -1.49, 0.012, 0.012, INK, false);
     ellipse(0.1, -1.49, 0.012, 0.012, INK, false);
     ellipse(0.09, -1.42, 0.014, 0.014, INK, false);
+    }
     ctx.restore();
     if (!gust.tooted || gust.t % 1 < 0.5) {
       ctx.save();
@@ -2329,6 +2672,7 @@
     ctx.save();
     ctx.translate(x, y + jolt);
     const L = boss.look;
+    if (mouseWorld) drawTail(1, Math.sin(clock * 3) * 0.05);
     // legs and shoes
     if (L.she) {
       rrect(-0.12, -0.5, 0.09, 0.48, 0.02, L.skin);
@@ -2363,6 +2707,11 @@
     ctx.fillText(L.she ? 'CEO' : '#1', -0.45, -1.03);
     ctx.restore();
     // head
+    if (mouseWorld) {
+      drawMouseHead(0, -1.5, L.skin, { bow: L.bow, glasses: L.glasses, open: boss.mode === 'flee', wide: boss.mode === 'flee', twitch: true });
+      ctx.restore();
+      return;
+    }
     if (L.she) {
       // bob with a bun on top, earrings
       ellipse(0, -1.5, 0.165, 0.18, L.hair);
@@ -2892,7 +3241,7 @@
   const GLASS = 'rgba(214,236,250,0.9)';
   const GRACE = 0.25;        // ignore the hits from the launch itself
   const MAX_SHARDS = 40;
-  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350, lava: 350, glass: 200, fishbowl: 400 };
+  const POINTS = { crack: 150, screen: 500, lamp: 300, mug: 250, pot: 250, acrylic: 400, snowglobe: 350, lava: 350, glass: 200, fishbowl: 400, cheese: 250 };
 
   function makeScreen(b, x, y, w, h) {
     b.breakable = 'screen';
@@ -2976,6 +3325,14 @@
       else if (b.breakable === 'zen' && dv > 3 && b.sand) spillSand(b);
       else if (b.breakable === 'glass' && dv > 3) breakApart(b, 'glass', 'glass smashed');
       else if (b.breakable === 'fishbowl' && dv > 3.2) breakApart(b, 'fishbowl', 'fishbowl smashed');
+      else if (b.breakable === 'cheese' && dv > 3.2) breakApart(b, 'cheese', 'cheese crumbled');
+      else if (b.breakable === 'trap' && dv > 1.5 && !b.sprung) {
+        b.sprung = true;
+        sfx.crack();
+        const c = b.getWorldCenter();
+        b.setAngularVelocity(b.getAngularVelocity() + rand(-12, 12));
+        addPoints(200, 'trap sprung', c.x, c.y);
+      }
       else if (b.breakable === 'fan' && dv > 3.5 && !b.stopped) {
         b.stopped = true;
         fry(b, 0, -0.24, 10);
@@ -3286,6 +3643,8 @@
     'glass smashed': 'Glasses smashed',
     'fishbowl smashed': 'Fishbowls smashed',
     'fan busted': 'Desk fans busted',
+    'cheese crumbled': 'Cheeses crumbled',
+    'trap sprung': 'Mousetraps sprung',
   };
   const damageBtn = document.getElementById('damage');
   const reportEl = document.getElementById('report');
@@ -3488,7 +3847,7 @@
           showBank(false);
           sfx.unlock();
           sfx.ding(true);
-          toastEl.textContent = `${w.name} acquired`;
+          toastEl.textContent = WEAPONS.every((x) => has(x.id)) ? 'You hear scratching under the desk\u2026' : `${w.name} acquired`;
           toastEl.classList.remove('show');
           void toastEl.offsetWidth;
           toastEl.classList.add('show');
@@ -4378,6 +4737,7 @@
     updatePal(dt);
     updateGust(dt);
     updateWeapon(dt);
+    updateHole(dt);
     for (const p of popups) p.t += dt;
     popups = popups.filter((p) => p.t < 1.4);
     if (state === 'flipped' && !landed) hangEl.textContent = `hang time ${hang.toFixed(2)}s`;
@@ -4395,10 +4755,18 @@
         if (!moving || since > RESET_MAX) { state = 'fadeout'; stateT = 0; finishRound(); }
       }
     } else if (state === 'fadeout') {
-      fade = Math.min(1, stateT / FADE);
+      fade = Math.min(1, stateT / (portal ? 0.8 : FADE));
+      if (fade >= 1 && portal) { mouseWorld = portal.to; saveWorld(); }
       if (fade >= 1) { buildScene(); state = 'fadein'; stateT = 0; updateScore(); }
     } else if (state === 'fadein') {
-      fade = Math.max(0, 1 - stateT / FADE);
+      fade = Math.max(0, 1 - stateT / (portal ? 0.8 : FADE));
+      if (fade <= 0 && portal) {
+        portal = null;
+        toastEl.textContent = mouseWorld ? 'Welcome to Mouse World \u{1F9C0}' : 'Back to the big world';
+        toastEl.classList.remove('show');
+        void toastEl.offsetWidth;
+        toastEl.classList.add('show');
+      }
       if (fade <= 0) { state = 'ready'; stateT = 0; idleT = 0; updateScore(); }
     }
     hintEl.classList.toggle('show', state === 'ready' && idleT > (flips ? 3 : 0.8));
@@ -4608,11 +4976,302 @@
 
   let room = null;
 
+  // ---------- mouse world ----------
+  // Own every weapon and a mouse hole opens in the baseboard under the desk.
+  // Tap it to shrink down into a world of cheese and mouse managers; tap the
+  // hole again to come back.
+
+  let portal = null;          // the iris transition through the hole
+  let peekT = 0;              // something peeks out of the hole now and then
+  let peekDue = 3;
+  const HOLE_W = 0.17, HOLE_H = 0.2;
+
+  const holeOpen = () => mouseWorld || WEAPONS.every((w) => has(w.id));
+  const holeX = () => cx;
+
+  function saveWorld() {
+    try { localStorage.setItem('flippydesk.mouse', mouseWorld ? '1' : '0'); } catch (e) { /* storage blocked */ }
+  }
+
+  function holePath(x, w, h) {
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, floorY);
+    ctx.lineTo(x - w / 2, floorY - h + w / 2);
+    ctx.arc(x, floorY - h + w / 2, w / 2, Math.PI, 0);
+    ctx.lineTo(x + w / 2, floorY);
+    ctx.closePath();
+  }
+
+  function drawHole() {
+    if (!holeOpen()) return;
+    const x = holeX();
+    // a worn rim around the opening
+    holePath(x, HOLE_W + 0.03, HOLE_H + 0.015);
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fill();
+    holePath(x, HOLE_W, HOLE_H);
+    const g = ctx.createLinearGradient(0, floorY - HOLE_H, 0, floorY);
+    g.addColorStop(0, mouseWorld ? '#fff3c4' : '#1d1622');
+    g.addColorStop(1, mouseWorld ? '#f2d58a' : '#3a2c33');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.lineWidth = LW;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    // what's peeking through
+    const k = peekT > 0 ? Math.sin(Math.min(1, peekT / 2.2) * Math.PI) : 0;
+    if (k > 0.01) {
+      ctx.save();
+      holePath(x, HOLE_W, HOLE_H);
+      ctx.clip();
+      if (mouseWorld) {
+        // a giant human eye from the world outside
+        const y = floorY - HOLE_H * 0.45 + (1 - k) * 0.25;
+        ellipse(x, y, 0.2, 0.11, '#fffaf0');
+        ellipse(x + Math.sin(clock * 1.5) * 0.03, y, 0.075, 0.075, '#6b8fe6');
+        ellipse(x + Math.sin(clock * 1.5) * 0.03, y, 0.035, 0.035, INK, false);
+        ellipse(x + Math.sin(clock * 1.5) * 0.03 - 0.02, y - 0.025, 0.014, 0.014, '#fff', false);
+        // blink
+        if ((clock % 2.5) < 0.12) rrect(x - 0.21, y - 0.12, 0.42, 0.24, 0, '#f2c9a5');
+      } else {
+        ctx.translate(x, floorY + 0.02 + (1 - k) * 0.16);
+        ctx.scale(0.42, 0.42);
+        drawMouseHead(0, -0.25, '#9a9aa6', { twitch: true });
+      }
+      ctx.restore();
+    }
+  }
+
+  function updateHole(dt) {
+    if (!holeOpen() || state !== 'ready') { peekT = 0; return; }
+    if (peekT > 0) {
+      peekT += dt;
+      if (peekT > 2.2) { peekT = 0; peekDue = rand(4, 9); }
+    } else if ((peekDue -= dt) <= 0) {
+      peekT = 0.001;
+      if (!mouseWorld) sfx.squeak(0.25);
+    }
+  }
+
+  // Is the screen point (px, py) on the hole? A little generous for fingers.
+  function onHole(px, py) {
+    if (!holeOpen()) return false;
+    const x = px / ppm, y = py / ppm;
+    return Math.abs(x - holeX()) < HOLE_W / 2 + 0.08 && y > floorY - HOLE_H - 0.08 && y < floorY + 0.1;
+  }
+
+  function enterHole() {
+    if (state !== 'ready' || portal) return;
+    portal = { to: !mouseWorld, x: holeX() * ppm, y: (floorY - HOLE_H / 2) * ppm };
+    if (boss.mode === 'in') boss.mode = 'flee';
+    if (pal.mode === 'in') pal.mode = 'flee';
+    state = 'fadeout';
+    stateT = 0;
+    sfx.whoosh(0.8);
+    sfx.squeak(0.5);
+  }
+
+  // Black everywhere but a circle that closes on the hole, then opens again.
+  function drawPortal() {
+    if (!portal || fade <= 0) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const maxR = Math.hypot(W, H);
+    const r = maxR * Math.pow(1 - fade, 2);
+    const x = state === 'fadeout' ? portal.x : W / 2;
+    const y = state === 'fadeout' ? portal.y : H / 2;
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.arc(x, y, Math.max(0.5, r), 0, Math.PI * 2, true);
+    ctx.fillStyle = '#120e14';
+    ctx.fill('evenodd');
+  }
+
+  // A mouse head, front on, centred at (hx, hy) in the usual person scale.
+  function drawMouseHead(hx, hy, fur, o = {}) {
+    for (const s of [-1, 1]) {
+      const tw = o.twitch && s > 0 ? Math.sin(clock * 11) * 0.01 : 0;
+      ellipse(hx + s * 0.13, hy - 0.13 + tw, 0.09, 0.09, fur);
+      ellipse(hx + s * 0.13, hy - 0.13 + tw, 0.055, 0.055, '#f2a7b5', false);
+    }
+    if (o.bow) {
+      poly([[hx + 0.16, hy - 0.2], [hx + 0.24, hy - 0.25], [hx + 0.24, hy - 0.15]], o.bow);
+      poly([[hx + 0.16, hy - 0.2], [hx + 0.08, hy - 0.25], [hx + 0.08, hy - 0.15]], o.bow);
+      ellipse(hx + 0.16, hy - 0.2, 0.022, 0.022, o.bow);
+    }
+    ellipse(hx, hy, 0.13, 0.14, fur);
+    ellipse(hx, hy + 0.065, 0.075, 0.06, o.muzzle || '#f4ede6');
+    // beady eyes
+    for (const s of [-1, 1]) {
+      ellipse(hx + s * 0.05, hy - 0.025, 0.017, o.wide ? 0.026 : 0.021, INK, false);
+      ellipse(hx + s * 0.05 - 0.006, hy - 0.033, 0.006, 0.006, '#fff', false);
+    }
+    if (o.glasses) {
+      ctx.lineWidth = 0.008;
+      ctx.strokeStyle = INK;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.arc(hx + s * 0.05, hy - 0.025, 0.035, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      line(hx - 0.015, hy - 0.025, hx + 0.015, hy - 0.025, INK, 0.008);
+    }
+    // whiskers
+    const wig = o.twitch ? Math.sin(clock * 14) * 0.01 : 0;
+    for (const s of [-1, 1]) {
+      for (const d of [-0.025, 0, 0.025]) line(hx + s * 0.04, hy + 0.06, hx + s * 0.17, hy + 0.06 + d * 1.6 + wig, 'rgba(42,39,51,0.7)', 0.005);
+    }
+    ellipse(hx, hy + 0.04, 0.022, 0.017, '#e8798f');
+    // buck teeth and a little mouth
+    rrect(hx - 0.013, hy + 0.08, 0.026, 0.022, 0.004, '#ffffff');
+    line(hx, hy + 0.08, hx, hy + 0.1, 'rgba(42,39,51,0.4)', 0.004);
+    ctx.beginPath();
+    if (o.open) ctx.ellipse(hx, hy + 0.085, 0.022, 0.016, 0, 0, Math.PI * 2);
+    else {
+      ctx.arc(hx - 0.016, hy + 0.06, 0.016, 0.1 * Math.PI, 0.9 * Math.PI);
+      ctx.moveTo(hx + 0.032, hy + 0.06);
+      ctx.arc(hx + 0.016, hy + 0.06, 0.016, 0.1 * Math.PI, 0.9 * Math.PI);
+    }
+    ctx.lineWidth = 0.008;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+  }
+
+  // A long pink tail, curling out from behind at hip height.
+  function drawTail(dir, swish) {
+    ctx.beginPath();
+    ctx.moveTo(0, -0.75);
+    ctx.bezierCurveTo(dir * 0.3, -0.7, dir * 0.35, -0.15 + swish, dir * 0.55, -0.25 + swish);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 0.034;
+    ctx.stroke();
+    ctx.strokeStyle = '#f2a7b5';
+    ctx.lineWidth = 0.018;
+    ctx.stroke();
+  }
+
+  const MOUSE_BOSS_LINES = [
+    'Who moved my cheese? Seriously. Who.',
+    'Quick sync on the cheese report?',
+    'We need way more cheddar in Q3.',
+    'Let’s circle back after nap time.',
+    'Per my last squeak...',
+    'The cat is doing a reorg. Keep your head down.',
+    'Can you nibble through these numbers by Friday?',
+    'Big win, team! Anyway, the crumb budget is cut.',
+    'No running on the wheel during all-hands.',
+    'Mandatory cheese tasting at 4. Bring crackers.',
+    'Need that maze mapped by end of day.',
+    'Swiss is not a strategy. Holes are not a feature.',
+    'Gouda job last quarter. Now do it again, but brie-ter.',
+    'Who left a trap in the break room? Again?',
+    'Can you squeak up in meetings? We can’t hear you.',
+  ];
+  const MOUSE_BOSS_LOOKS = [
+    { pitch: 2.1, shirt: '#cfe0f5', legs: '#4a4f5c', accent: '#e66b6b', skin: '#9a9aa6', she: false, glasses: true },
+    { pitch: 2.6, shirt: '#3d4a6b', legs: '#3d4a6b', accent: '#f2c14e', skin: '#a77b5a', she: true, bow: '#e66b6b' },
+    { pitch: 2.5, shirt: '#8a3d55', legs: '#2f2c38', accent: '#e8e2d6', skin: '#ece8e2', she: true, bow: '#6b8fe6' },
+  ];
+  const MOUSE_PAL_LINES = [
+    'Okay so I found a crumb THIS big.',
+    'Wanna see 400 pictures of my nest?',
+    'Have you tried the wheel? Life changing.',
+    'Is this your cheese? It’s mine now.',
+    'My cousin lives in a museum wall. Very fancy.',
+    'Did you hear about the cat thing? Huge drama.',
+    'I’m starting a podcast. It’s just squeaking.',
+  ];
+  const MOUSE_PAL_LOOKS = [
+    { hair: '#6b3f22', hoodie: '#7cc58f', skin: '#a77b5a', pants: '#4a4f5c' },
+    { hair: '#e0b84a', hoodie: '#b48be0', skin: '#ece8e2', pants: '#3d4a6b' },
+    { hair: '#1d1c22', hoodie: '#f08a4b', skin: '#9a9aa6', pants: '#2f2c38' },
+  ];
+
+  // Rooms on the mouse side of the wall.
+  const MOUSE_ROOMS = {
+    burrow: {
+      ink: '#3a2a1e', fade: '#e9d3ad', mouse: true,
+      draw() {
+        wall('#e2c497', '#cfa877');
+        // wall studs with nail heads
+        for (let x = 0.25; x < Wm; x += 0.95) {
+          rrect(x, -0.05, 0.16, floorY + 0.05, 0, 'rgba(120,80,40,0.16)', false);
+          for (let y = 0.4; y < floorY; y += 0.7) ellipse(x + 0.08, y, 0.012, 0.012, 'rgba(60,45,40,0.5)', false);
+        }
+        // a hanging fairy-light bulb
+        const bx = cx - DESK_W / 2 + 0.35;
+        line(bx, 0, bx, 0.45, 'rgba(42,39,51,0.6)', 0.008);
+        const glow = 0.8 + 0.2 * Math.sin(clock * 2.3);
+        ctx.fillStyle = `rgba(255,214,120,${0.18 * glow})`;
+        ctx.beginPath();
+        ctx.arc(bx, 0.55, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        rrect(bx - 0.025, 0.43, 0.05, 0.05, 0.008, '#4a8a5a');
+        ellipse(bx, 0.55, 0.05, 0.08, '#ffd678');
+        // a postage stamp, hung as art
+        const w = windowSpot();
+        if (w.wh > 0.35) {
+          const sw = Math.min(w.ww * 0.7, w.wh * 0.85), sh = w.wh;
+          const sx = w.wx + (w.ww - sw) / 2, sy = w.wy;
+          rrect(sx, sy, sw, sh, 0, '#fffaf0');
+          ctx.fillStyle = '#d9b98a';
+          for (let t = 0.03; t < sw; t += 0.06) {
+            for (const yy of [sy, sy + sh]) { ctx.beginPath(); ctx.arc(sx + t, yy, 0.016, 0, Math.PI * 2); ctx.fill(); }
+          }
+          for (let t = 0.03; t < sh; t += 0.06) {
+            for (const xx of [sx, sx + sw]) { ctx.beginPath(); ctx.arc(xx, sy + t, 0.016, 0, Math.PI * 2); ctx.fill(); }
+          }
+          rrect(sx + 0.06, sy + 0.06, sw - 0.12, sh - 0.12, 0, '#7fb8d8', false);
+          cheeseIcon(sx + sw / 2, sy + sh * 0.45, Math.min(sw, sh) * 0.22);
+          label('5¢', sx + sw - 0.13, sy + 0.14, 0.06, '#fff');
+          label('SQUEAK POST', sx + sw / 2, sy + sh - 0.1, Math.min(0.05, sw * 0.1), '#fff');
+        }
+        floor('#a0703f', 'rgba(0,0,0,0.1)', '#7a5232');
+      },
+    },
+    pantry: {
+      ink: '#2a2733', fade: '#efe6d2', mouse: true,
+      draw() {
+        wall('#f4ecda', '#e6d9bd');
+        // a giant soup can and cereal box looming behind the desk
+        const w = windowSpot();
+        const canW = Math.min(1.2, Wm * 0.36);
+        const canX = w.wx + w.ww - canW;
+        const canTop = Math.max(0.1, floorY - DESK_H - 1.1);
+        rrect(canX, canTop, canW, floorY - canTop + 0.1, 0.03, '#c9ccd3');
+        rrect(canX, canTop + 0.12, canW, (floorY - canTop) * 0.55, 0, '#d94a4a');
+        rrect(canX, canTop + 0.12 + (floorY - canTop) * 0.4, canW, 0.06, 0, '#fff6e0', false);
+        label('CHEESE', canX + canW / 2, canTop + 0.12 + (floorY - canTop) * 0.25, Math.min(0.16, canW * 0.17), '#fff6e0');
+        label('SOUP', canX + canW / 2, canTop + 0.12 + (floorY - canTop) * 0.36, Math.min(0.09, canW * 0.1), '#fff6e0');
+        for (let y = canTop + 0.04; y < canTop + 0.12; y += 0.03) line(canX, y, canX + canW, y, 'rgba(0,0,0,0.12)', 0.006);
+        const boxX = cx - DESK_W / 2 - 0.25;
+        rrect(boxX, canTop + 0.25, 0.85, floorY - canTop, 0.02, '#f2c14e');
+        label('O’s', boxX + 0.42, canTop + 0.6, 0.14, '#d94a4a');
+        for (let i = 0; i < 4; i++) ellipse(boxX + 0.2 + i * 0.14, canTop + 0.85 + (i % 2) * 0.08, 0.05, 0.05, '#e9a92c');
+        // shelf paper floor
+        floor('#e9e1cf', null, '#c9b996');
+        ctx.fillStyle = 'rgba(217,74,74,0.22)';
+        for (let x = 0; x < Wm; x += 0.24) ctx.fillRect(x, floorY, 0.12, Hm - floorY);
+      },
+    },
+  };
+  Object.assign(ROOMS, MOUSE_ROOMS);
+
+  // The mouse desk is cut from cheese, or from a wine cork.
+  const MOUSE_WOODS = [
+    { top: CHEESE, side: CHEESE_RIND, grain: 'rgba(200,130,20,0.35)', holes: true },
+    { top: CHEESE, side: CHEESE_RIND, grain: 'rgba(200,130,20,0.35)', holes: true },
+    { top: '#fbe08a', side: CHEESE, grain: 'rgba(200,130,20,0.3)', holes: true },
+    { top: '#c99b62', side: '#b0844f', grain: 'rgba(90,50,20,0.25)', holes: false },
+  ];
+
+
   // Keep the current room most of the time; now and then move somewhere new.
   function pickRoom() {
-    if (room && !chance(0.35)) return;
-    const names = Object.keys(ROOMS).filter((n) => !room || n !== room.name);
-    const name = room ? pick(names) : 'home';
+    const sameWorld = room && !!room.theme.mouse === mouseWorld;
+    if (sameWorld && !chance(0.35)) return;
+    const names = Object.keys(ROOMS).filter((n) => !!ROOMS[n].mouse === mouseWorld && (!room || n !== room.name));
+    const name = room ? pick(names) : (mouseWorld ? 'burrow' : 'home');
     room = {
       name,
       theme: ROOMS[name],
@@ -4631,6 +5290,7 @@
 
   function drawRoom() {
     room.theme.draw();
+    drawHole();
 
     // coffee stains and spilled dirt
     for (const s of stains) {
@@ -4711,7 +5371,8 @@
     }
     drawWeaponScreen();
 
-    if (fade > 0) {
+    if (fade > 0 && portal) drawPortal();
+    else if (fade > 0) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.globalAlpha = fade;
       ctx.fillStyle = room.theme.fade;
@@ -4772,7 +5433,10 @@
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!swipe) return;
+    if (!swipe) {
+      canvas.style.cursor = state === 'ready' && onHole(e.clientX, e.clientY) ? 'pointer' : '';
+      return;
+    }
     if (grab) {
       trackSwipe(e);
       moveTilt(e.clientX, e.clientY);
@@ -4793,6 +5457,11 @@
     }
   });
   canvas.addEventListener('pointerup', (e) => {
+    if (swipe && !grab && onHole(e.clientX, e.clientY) && Math.hypot(e.clientX - swipe.x0, e.clientY - swipe.y0) < 14) {
+      swipe = null;
+      enterHole();
+      return;
+    }
     if (grab) releaseTilt();
     else tryFlip(e, 25);
     swipe = null;
@@ -4849,6 +5518,9 @@
     gust: () => { gust.due = 0; },
     get dog() { return dog && dog.mode; },
     weapon: (id) => useWeapon(id),
+    hole: () => enterHole(),
+    get mouseWorld() { return mouseWorld; },
+    get holeOpen() { return holeOpen(); },
     get cash() { return cash; },
     set cash(n) { cash = n; saveBank(); showBank(false); },
     get arms() { return armJoints.map((a) => [a.broken ? 1 : 0, Math.round(a.max || 0)]); },
