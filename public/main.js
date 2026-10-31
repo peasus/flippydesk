@@ -127,6 +127,7 @@
     b.draw = draw;
     b.kind = o.kind || '';
     b.z = o.z || 0;
+    b.item = o.item || currentItem;
     bodies.push(b);
     return b;
   }
@@ -305,7 +306,7 @@
     };
   }
 
-  const widescreen = () => monitor(0.86, 0.32);
+  function widescreen() { return monitor(0.86, 0.32); }
 
   // A tower PC standing on the desk. A hard enough knock fries it.
   function tower() {
@@ -434,6 +435,7 @@
     for (const a of armJoints) {
       if (a.broken) continue;
       const f = a.j.getReactionForce(1 / dt).length();
+      hitItem = a.j.getBodyB().item;
       a.max = Math.max(a.max || 0, f);
       if (f < a.limit) continue;
       a.broken = true;
@@ -1339,25 +1341,72 @@
     };
   }
 
+  // ---------- item names ----------
+  // Every body an item creates is tagged with the item's name, so the
+  // damage report can count what was flipped and what got broken.
+
+  let currentItem = null;
+  const ITEM_NAMES = [];
+
+  function named(name, make) {
+    ITEM_NAMES.push(name);
+    return (...args) => {
+      const it = make(...args);
+      const place = it.place;
+      it.place = (x, y) => {
+        const prev = currentItem;
+        currentItem = name;
+        try { place(x, y); } finally { currentItem = prev; }
+      };
+      return it;
+    };
+  }
+
+  const rawMonitor = monitor;
+  widescreen = named('Widescreen monitor', () => rawMonitor(0.86, 0.32));
+  monitor = named('Monitor', monitor);
+  laptop = named('Laptop', laptop);
+  crt = named('CRT monitor', crt);
+  allInOne = named('All-in-one', allInOne);
+  tower = named('Tower PC', tower);
+  retroDesktop = named('Retro desktop', retroDesktop);
+  armSetup = named('Monitor arm', armSetup);
+  keyboard = named('Keyboard', keyboard);
+  mouse = named('Mouse', mouse);
+  speaker = named('Speaker', speaker);
+  mug = named('Mug', mug);
+  bookStack = named('Books', bookStack);
+  ITEM_NAMES.pop();
+  booksUpright = named('Books', booksUpright);
+  plant = named('Plant', plant);
+  lamp = named('Lamp', lamp);
+  pencilCup = named('Pencil cup', pencilCup);
+  duck = named('Rubber duck', duck);
+  globe = named('Globe', globe);
+  sodaCan = named('Soda can', sodaCan);
+  alarmClock = named('Alarm clock', alarmClock);
+  stickyPad = named('Sticky notes', stickyPad);
+  photoFrame = named('Photo frame', photoFrame);
+
   // Swag unlocks as the flip count grows; each new item is guaranteed a spot
   // on the next desk.
   const UNLOCKS = [
-    { at: 2, name: 'Conference badge', make: confBadge },
-    { at: 3, name: 'Stress ball', make: stressBall },
-    { at: 4, name: 'Fidget spinner', make: fidgetSpinner },
-    { at: 6, name: 'Branded water bottle', make: waterBottle },
-    { at: 8, name: 'Decision ball', make: decisionBall },
-    { at: 10, name: 'Patent award', make: patentAward },
-    { at: 12, name: 'Employee of the Month', make: plaque },
-    { at: 15, name: 'Snow globe', make: snowGlobe },
-    { at: 18, name: 'Lava lamp', make: lavaLamp },
-    { at: 21, name: 'Zen garden', make: zenGarden },
-    { at: 25, name: 'Anniversary monolith', make: monolith },
-    { at: 30, name: 'Sales gong', make: salesGong },
-    { at: 35, name: 'CEO bobblehead', make: bobblehead },
-    { at: 40, name: 'Desk Flipper trophy', make: trophy },
-    { at: 50, name: 'Mascot plush', make: plushMascot },
-    { at: 60, name: 'Founder’s gold stapler', make: goldStapler },
+    { at: 2, name: 'Conference badge', make: named('Conference badge', confBadge) },
+    { at: 3, name: 'Stress ball', make: named('Stress ball', stressBall) },
+    { at: 4, name: 'Fidget spinner', make: named('Fidget spinner', fidgetSpinner) },
+    { at: 6, name: 'Branded water bottle', make: named('Branded water bottle', waterBottle) },
+    { at: 8, name: 'Decision ball', make: named('Decision ball', decisionBall) },
+    { at: 10, name: 'Patent award', make: named('Patent award', patentAward) },
+    { at: 12, name: 'Employee of the Month', make: named('Employee of the Month', plaque) },
+    { at: 15, name: 'Snow globe', make: named('Snow globe', snowGlobe) },
+    { at: 18, name: 'Lava lamp', make: named('Lava lamp', lavaLamp) },
+    { at: 21, name: 'Zen garden', make: named('Zen garden', zenGarden) },
+    { at: 25, name: 'Anniversary monolith', make: named('Anniversary monolith', monolith) },
+    { at: 30, name: 'Sales gong', make: named('Sales gong', salesGong) },
+    { at: 35, name: 'CEO bobblehead', make: named('CEO bobblehead', bobblehead) },
+    { at: 40, name: 'Desk Flipper trophy', make: named('Desk Flipper trophy', trophy) },
+    { at: 50, name: 'Mascot plush', make: named('Mascot plush', plushMascot) },
+    { at: 60, name: 'Founder’s gold stapler', make: named('Founder’s gold stapler', goldStapler) },
   ];
   let freshUnlock = null;
 
@@ -2161,6 +2210,7 @@
     idleT = 0;
     flips++;
     damageNow = {};
+    logFlipped();
     try { localStorage.setItem('flippydesk.flips', String(flips)); } catch (e) { /* storage blocked */ }
     checkUnlock();
     score = 0;
@@ -2582,6 +2632,7 @@
       const dv = b.hit;
       if (!dv) continue;
       b.hit = 0;
+      hitItem = b === desk ? 'Desk' : b.item;
       if (b.breakable === 'screen') hitScreen(b, dv);
       else if (b.breakable === 'lamp' && dv > 2.6) breakApart(b, 'lamp', 'lamp smashed');
       else if (b.breakable === 'mug' && dv > 4) breakApart(b, 'mug', 'mug smashed');
@@ -2894,11 +2945,32 @@
   const reportEl = document.getElementById('report');
   let damage = {};
   let damageNow = {};
+  let items = {};          // name -> { flipped, broken }
+  let hitItem = null;      // the item whose hit is being handled right now
   try { damage = JSON.parse(localStorage.getItem('flippydesk.broken')) || {}; } catch (e) { damage = {}; }
+  try { items = JSON.parse(localStorage.getItem('flippydesk.items')) || {}; } catch (e) { items = {}; }
+
+  const itemStat = (name) => (items[name] = items[name] || { flipped: 0, broken: 0 });
+
+  function saveItems() {
+    try { localStorage.setItem('flippydesk.items', JSON.stringify(items)); } catch (e) { /* private mode */ }
+  }
+
+  // Count each item on the desk once per flip.
+  function logFlipped() {
+    const seen = new Set(['Desk']);
+    for (const b of bodies) if (b.item) seen.add(b.item);
+    for (const name of seen) itemStat(name).flipped++;
+    saveItems();
+  }
 
   const damageTotal = (d) => Object.values(d).reduce((a, b) => a + b, 0);
 
   function logDamage(label) {
+    if (hitItem) {
+      itemStat(hitItem).broken++;
+      saveItems();
+    }
     damage[label] = (damage[label] || 0) + 1;
     damageNow[label] = (damageNow[label] || 0) + 1;
     try { localStorage.setItem('flippydesk.broken', JSON.stringify(damage)); } catch (e) { /* private mode */ }
@@ -2914,30 +2986,57 @@
     }
   }
 
-  function openReport() {
-    const rows = Object.keys(DAMAGE)
-      .filter((k) => damage[k])
-      .sort((a, b) => damage[b] - damage[a]);
-    const body = reportEl.querySelector('tbody');
+  function fillTable(table, rows) {
+    const body = table.querySelector('tbody');
     body.textContent = '';
-    for (const k of rows) {
+    for (const { cells, cls } of rows) {
       const tr = document.createElement('tr');
-      const now = damageNow[k] || 0;
-      for (const [text, cls] of [[DAMAGE[k], ''], [now ? `+${now}` : '–', now ? 'now' : ''], [damage[k].toLocaleString(), '']]) {
+      if (cls) tr.className = cls;
+      for (const [text, tdCls] of cells) {
         const td = document.createElement('td');
         td.textContent = text;
-        if (cls) td.className = cls;
+        if (tdCls) td.className = tdCls;
         tr.appendChild(td);
       }
       body.appendChild(tr);
     }
+  }
+
+  function openReport() {
+    const num = (n) => (n ? n.toLocaleString() : '\u2013');
+    // Collection: everyday items, then swag in unlock order (locked ones hidden).
+    const rows = [];
+    const swagNames = new Set(UNLOCKS.map((u) => u.name));
+    for (const name of ['Desk', ...ITEM_NAMES.filter((n) => !swagNames.has(n))]) {
+      const st = items[name] || { flipped: 0, broken: 0 };
+      rows.push({ cls: st.flipped ? '' : 'zero', cells: [[name], [num(st.flipped)], [num(st.broken), st.broken ? 'now' : '']] });
+    }
+    let unlocked = 0;
+    for (const u of UNLOCKS) {
+      if (flips >= u.at) {
+        unlocked++;
+        const st = items[u.name] || { flipped: 0, broken: 0 };
+        rows.push({ cls: st.flipped ? '' : 'zero', cells: [[u.name], [num(st.flipped)], [num(st.broken), st.broken ? 'now' : '']] });
+      } else {
+        rows.push({ cls: 'locked', cells: [['\uD83D\uDD12 ???'], [`at ${u.at}`], ['flips']] });
+      }
+    }
+    fillTable(reportEl.querySelector('table.items'), rows);
+    reportEl.querySelector('.unlocked').textContent = `${unlocked} of ${UNLOCKS.length} swag items unlocked`;
+
+    const kinds = Object.keys(DAMAGE).filter((k) => damage[k]).sort((a, b) => damage[b] - damage[a]);
+    fillTable(reportEl.querySelector('table.kinds'), kinds.map((k) => {
+      const now = damageNow[k] || 0;
+      return { cells: [[DAMAGE[k]], [now ? `+${now}` : '\u2013', now ? 'now' : ''], [damage[k].toLocaleString()]] };
+    }));
     const total = damageTotal(damage);
     reportEl.querySelector('.total').textContent = total
       ? `${total.toLocaleString()} things broken across ${flips.toLocaleString()} desk${flips === 1 ? '' : 's'} flipped`
-      : '';
-    reportEl.querySelector('table').hidden = !rows.length;
-    reportEl.querySelector('.empty').hidden = !!rows.length;
+      : `${flips.toLocaleString()} desk${flips === 1 ? '' : 's'} flipped so far`;
+    reportEl.querySelector('table.kinds').hidden = !kinds.length;
+    reportEl.querySelector('.empty').hidden = !!kinds.length;
     reportEl.hidden = false;
+    reportEl.querySelector('.card').scrollTop = 0;
     reportEl.querySelector('.close').focus();
   }
 
