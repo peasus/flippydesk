@@ -300,7 +300,6 @@ html, body {
 #arsenal button:active { transform: translateY(2px); box-shadow: 0 1px 0 #2a2733; }
 #arsenal.busy { opacity: 0.3; pointer-events: none; }
 
-/* The robot world swaps the store for a shotgun. */
-body[data-world="robot"] #shop,
-body[data-world="robot"] #arsenal { display: none; }
+/* In the robot world the arsenal is a gun rack; the one in your hands is lit. */
+#arsenal button.on { background: #5dc9ff; box-shadow: 0 3px 0 #2a2733, 0 0 0 3px #fffaf0; }
 body[data-world="robot"] #stage { cursor: crosshair; }
