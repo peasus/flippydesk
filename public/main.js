@@ -4406,7 +4406,7 @@
   // Punch Pitcher's gym sells upgrades for the uppercut.
   const PUNCH_ARMS = [
     { id: 'sugar', gear: 'upgrade', name: 'Sugar rush', icon: '\u{1F36C}', price: 12000, blurb: 'A harder uppercut: the desk leaves a third faster.' },
-    { id: 'ice', gear: 'upgrade', name: 'Ice cube shield', icon: '\u{1F9CA}', price: 25000, blurb: 'Smashes through the first steel beam instead of stopping dead.' },
+    { id: 'ice', gear: 'upgrade', name: 'Ice cube shield', icon: '\u{1F9CA}', price: 25000, blurb: 'Smashes through the first steel beam at full speed.' },
     { id: 'party', gear: 'upgrade', name: 'Party size', icon: '\u{1F389}', price: 45000, blurb: 'A desk half again as wide hits half again as much.' },
     { id: 'straw', gear: 'upgrade', name: 'Magnet straw', icon: '\u{1F9F2}', price: 80000, blurb: 'Slurps up anything within reach on the way past.' },
   ];
@@ -5863,7 +5863,7 @@
       fade = Math.max(0, 1 - stateT / (portal ? 0.8 : FADE));
       if (fade <= 0 && portal) {
         portal = null;
-        toastEl.textContent = punchWorld ? 'Swipe and he uppercuts the desk. Steer it up!' : robotWorld ? 'Flip it, then shoot the pieces!' : mouseWorld ? 'Welcome to Mouse World \u{1F9C0}' : 'Back to the big world';
+        toastEl.textContent = punchWorld ? 'Swipe to uppercut. Swipe up again mid-air for another!' : robotWorld ? 'Flip it, then shoot the pieces!' : mouseWorld ? 'Welcome to Mouse World \u{1F9C0}' : 'Back to the big world';
         toastEl.classList.remove('show');
         void toastEl.offsetWidth;
         toastEl.classList.add('show');
@@ -7414,7 +7414,14 @@
           if (beams.every(([a, b]) => b0 > b + DESK_W * 1.3 || b0 + bw < a - DESK_W * 1.3)) beams.push([b0, b0 + bw]);
         }
       }
-      floors.push({ dept: DEPTS[k - 1], wall: WALLS[k - 1], things, beams, holes: [] });
+      // ceiling fans to dodge on the way up, more of them higher up
+      const fans = [];
+      const nf = k < 2 ? 0 : k < 5 ? randInt(0, 1) : randInt(1, 2);
+      for (let i = 0; i < nf; i++) {
+        const fx = rand(0.5, Wm - 0.5);
+        if (fans.every((f) => Math.abs(f.x - fx) > DESK_W * 1.4)) fans.push({ x: fx, spin: rand(0, 6) });
+      }
+      floors.push({ dept: DEPTS[k - 1], wall: WALLS[k - 1], things, beams, fans, holes: [] });
     }
     bldg = { fh, floors };
   }
@@ -7427,6 +7434,7 @@
       x: p.x, y: p.y, ang: 0, target: p.x, t: 0,
       vy: -(9.5 + clamp(strength, 0.3, 2.6) * 2.6) * (has('sugar') ? 1.3 : 1),
       slab: 1, pile: [], shield: has('ice'), carried: [], over: false,
+      punches: 1, pow: 0,
     };
     for (const b of bodies) {
       const q = b.getPosition();
@@ -7438,10 +7446,37 @@
     pitcher.throwT = 0;
     sfx.whoosh(2.4);
     shake = Math.max(shake, 0.4);
+    if (++runsSeen <= 3) {
+      toastEl.textContent = 'Swipe up again for another uppercut!';
+      toastEl.classList.remove('show');
+      void toastEl.offsetWidth;
+      toastEl.classList.add('show');
+    }
   }
+  let runsSeen = 0;
 
   function steer(px) {
     if (run && !run.over) run.target = toWorld(px, 0).x;
+  }
+
+  // Swipe up again mid-flight and he lands another uppercut, if you have one
+  // saved. Hitting things on the way up earns them back, up to three.
+  const MAX_PUNCHES = 3;
+  function reUppercut() {
+    if (!run || run.over) return;
+    if (run.punches <= 0) {
+      if (!run.noted) { run.noted = true; addPoints(0, 'hit something to earn a punch!', run.x, run.y - DESK_H - 0.6); }
+      return;
+    }
+    run.punches--;
+    run.pows = (run.pows || 0) + 1;
+    run.vy = Math.max(-24, Math.min(run.vy, -2) - 7.5 * (has('sugar') ? 1.2 : 1));
+    run.pow = 0.45;
+    pitcher.throwT = 0;
+    sfx.whoosh(2.6);
+    sfx.thud(1, 1.3);
+    shake = Math.max(shake, 0.5);
+    addPoints(250, 'POW! uppercut', run.x, run.y + 0.1);
   }
 
   function updateRun(dt) {
@@ -7478,11 +7513,20 @@
       const sy = slabY(run.slab);
       const beam = f.beams.find((b) => !b.broken && b[1] > x0 && b[0] < x1);
       if (beam) {
-        if (!run.shield) return endRun(false, 'clang! steel beam');
-        run.shield = false;
         beam.broken = true;
-        sfx.shatter(1);
-        addPoints(500, 'ice cube shield!', run.x, sy);
+        if (run.shield) {
+          run.shield = false;
+          sfx.shatter(1);
+          addPoints(500, 'ice cube shield!', run.x, sy);
+        } else {
+          // smashes through, but only just: uppercut now or it stalls
+          run.vy *= 0.35;
+          sfx.clang();
+          shake = Math.max(shake, 0.7);
+          const lost = run.pile.splice(0, Math.min(4, run.pile.length));
+          for (const p of lost) rain.push({ kind: p.kind, c: p.c, x: run.x + p.ox, y: sy, vx: rand(-4, 4), vy: rand(-2, 1), a: p.a, va: rand(-8, 8) });
+          addPoints(0, run.punches ? 'CLANG! swipe up!' : 'CLANG! steel beam', run.x, sy - 0.1);
+        }
       }
       f.holes.push([x0, x1]);
       for (let i = 0; i < 10; i++) smoke.push({ x: run.x + rand(-reach, reach), y: sy + 0.05, r: rand(0.06, 0.14), t: -rand(0, 0.2), life: rand(1, 2), vx: rand(-0.4, 0.4), shade: rand(150, 200) });
@@ -7492,6 +7536,23 @@
       sfx.smash();
       addPoints(100 * run.slab, `floor ${run.slab}!`, run.x, sy - 0.1);
       run.slab++;
+    }
+    run.pow = Math.max(0, run.pow - dt);
+    // ceiling fans: steer around them, or lose speed and some of the pile
+    for (let k = 1; k <= FLOORS; k++) {
+      const fanY = slabY(k + 1) + SLAB + 0.32;
+      if (fanY < top - 0.3 || fanY > run.y) continue;
+      for (const fan of bldg.floors[k - 1].fans) {
+        if (fan.hit || Math.abs(fan.x - run.x) > reach + 0.32) continue;
+        fan.hit = true;
+        run.vy *= 0.55;
+        sfx.clang();
+        shake = Math.max(shake, 0.6);
+        const lost = run.pile.splice(0, Math.min(3, run.pile.length));
+        for (const p of lost) rain.push({ kind: p.kind, c: p.c, x: run.x + p.ox, y: top, vx: rand(-4, 4), vy: rand(-3, 0), a: p.a, va: rand(-8, 8) });
+        for (let i = 0; i < 16; i++) confetti.push({ x: fan.x + rand(-0.3, 0.3), y: fanY, vx: rand(-4, 4), vy: rand(-3, 2), a: rand(0, 6), spin: rand(-12, 12), c: pick(['#8a6a5a', '#d9d3c7', '#5b6170']), t: 0 });
+        addPoints(0, lost.length ? `ouch, fan! lost ${lost.length}` : 'ouch, fan!', fan.x, fanY);
+      }
     }
     // everything standing in the desk's way comes along
     const grab = has('straw') ? 0.45 : 0;
@@ -7509,6 +7570,7 @@
           for (let i = 0; i < 16; i++) drops.push(Object.assign({ x: t.x + rand(-0.15, 0.15), y: fy - 0.03, vx: rand(-2, 2), vy: rand(-4, -1), r: rand(0.01, 0.025) }, PUNCH_SPLASH));
         } else {
           run.pile.push({ kind: t.kind, c: t.c, a: rand(-0.6, 0.6), ox: rand(-0.75, 0.75) });
+          if (run.punches < MAX_PUNCHES) { run.punches++; run.noted = false; }
           run.vy *= t.kind === 'boss' ? 0.8 : 0.97;
           itemStat(T.name).flipped++;
           sfx.thud(0.6, 0.6);
@@ -7524,6 +7586,7 @@
 
   // The desk breaks out of the roof, or runs out of steam, and it all comes down.
   function endRun(roof, why) {
+    run.why = roof ? "roof" : why;
     run.over = true;
     saveItems();
     for (const c of run.carried) {
@@ -7813,6 +7876,7 @@
       ctx.fillText(`${k}F ${f.dept}`, 0, 0);
       ctx.restore();
       for (const t of f.things) if (!t.hit) drawThing(t.kind, t.x, fy, t.c);
+      for (const fan of f.fans) drawFan(fan, slabY(k + 1) + SLAB);
       // the slab this floor stands on, with holes where the desk came through
       drawSlab(fy, f.holes, k > 1 ? bldg.floors[k - 2].beams : []);
     }
@@ -7821,6 +7885,27 @@
     // the outside walls
     rrect(-0.6, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, '#8a6a5a', false);
     rrect(Wm, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, '#8a6a5a', false);
+  }
+
+  // A ceiling fan hanging under a slab; once hit it dangles, bent.
+  function drawFan(fan, ceil) {
+    const y = ceil + 0.32;
+    if (fan.hit) {
+      line(fan.x, ceil, fan.x + 0.12, y + 0.05, INK, 0.02);
+      ellipse(fan.x + 0.12, y + 0.05, 0.05, 0.035, '#5b6170');
+      line(fan.x + 0.12, y + 0.05, fan.x + 0.3, y + 0.25, '#8a6a5a', 0.03);
+      return;
+    }
+    line(fan.x, ceil, fan.x, y, INK, 0.02);
+    const a = fan.spin + clock * 14;
+    for (let i = 0; i < 4; i++) {
+      const c = Math.cos(a + i * Math.PI / 2);
+      ctx.beginPath();
+      ctx.ellipse(fan.x + c * 0.15, y + 0.01, Math.abs(c) * 0.15 + 0.01, 0.022, 0, 0, Math.PI * 2);
+      finish('#8a6a5a');
+    }
+    ellipse(fan.x, y, 0.06, 0.04, '#5b6170');
+    ellipse(fan.x, y + 0.05, 0.035, 0.025, '#ffe9a8');
   }
 
   function drawSlab(y, holes, beams) {
@@ -7914,6 +7999,25 @@
 
   // The haul piled on the desk, and the same haul raining back down.
   function drawRunPile() {
+    if (run && !run.over) {
+      // the uppercut glove driving up under the desk
+      if (run.pow > 0) {
+        const k = run.pow / 0.45;
+        ctx.save();
+        ctx.translate(run.x - 0.2, run.y + 0.15 + (1 - k) * -0.3);
+        ctx.globalAlpha = Math.min(1, k * 2);
+        drawBoxingGlove(0.22, '#d8303e');
+        ctx.restore();
+      }
+      // punches saved for another uppercut
+      for (let i = 0; i < run.punches; i++) {
+        ctx.save();
+        ctx.translate(run.x - DESK_W / 2 - 0.14, run.y - DESK_H * 0.35 + i * 0.2 - 0.2);
+        ellipse(0, 0, 0.09, 0.09, 'rgba(255,255,255,0.85)');
+        drawBoxingGlove(0.065, '#d8303e');
+        ctx.restore();
+      }
+    }
     if (run && !run.over && run.pile.length) {
       const topY = run.y - DESK_H;
       ctx.save();
@@ -8168,11 +8272,13 @@
     swipe = null;
   }
 
+  let runSwipe = null;   // a finger that might swipe up again mid-flight in Punch Tower
   canvas.addEventListener('pointerdown', (e) => {
     sfx.unlock();
     if (cyborg) return;
     if (punchWorld && state === 'flipped') {
       steer(e.clientX);
+      runSwipe = { y: e.clientY, t: performance.now() };
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
       return;
     }
@@ -8194,6 +8300,11 @@
   canvas.addEventListener('pointermove', (e) => {
     if (firing) { firing.x = e.clientX; firing.y = e.clientY; return; }
     if (run && !run.over && (e.buttons || e.pointerType === 'mouse')) steer(e.clientX);
+    if (runSwipe && run && !run.over) {
+      const now = performance.now();
+      if (runSwipe.y - e.clientY > 45 && now - runSwipe.t < 400) { reUppercut(); runSwipe = null; }
+      else if (now - runSwipe.t > 400) runSwipe = { y: e.clientY, t: now };
+    }
     if (!swipe) {
       canvas.style.cursor = state === 'ready' && (onHole(e.clientX, e.clientY) || onGameScreen(e.clientX, e.clientY)) ? 'pointer' : '';
       return;
@@ -8219,6 +8330,7 @@
   });
   canvas.addEventListener('pointerup', (e) => {
     firing = null;
+    runSwipe = null;
     if (swipe && !grab && onHole(e.clientX, e.clientY) && Math.hypot(e.clientX - swipe.x0, e.clientY - swipe.y0) < 14) {
       swipe = null;
       enterHole();
@@ -8243,6 +8355,11 @@
     if (run && !run.over && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
       e.preventDefault();
       run.target = run.x + (e.code === 'ArrowLeft' ? -1 : 1) * 0.8;
+      return;
+    }
+    if (run && !run.over && (e.code === 'Space' || e.code === 'ArrowUp')) {
+      e.preventDefault();
+      if (!e.repeat) reUppercut();
       return;
     }
     if (e.code === 'Space' || e.code === 'ArrowUp') {
@@ -8276,6 +8393,7 @@
   window.flippyDesk = {
     flip: (s = 1.2) => flip(s, 1, 0),
     get state() { return state; },
+    run: () => run && { pows: run.pows || 0, why: run.why, punches: run.punches, slab: run.slab, vy: run.vy, over: run.over },
     glove: () => { if (!punchGlove || !bodies.includes(punchGlove)) return null; const c = punchGlove.getWorldCenter(); return { x: W / 2 + (c.x - cx) * ppm * zoom, y: floorY * ppm - (floorY - c.y - lift) * ppm * zoom }; },
     get score() { return score; },
     get hang() { return hang; },
