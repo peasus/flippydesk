@@ -101,12 +101,13 @@
   let flips = 0, best = 0;
   let mouseWorld = false;     // through the mouse hole
   let robotWorld = false;     // through the game screen
+  let punchWorld = false;     // uppercut up from the robot world
   try {
     const saved = localStorage.getItem('flippydesk.world');
-    if (saved) { mouseWorld = saved === 'mouse'; robotWorld = saved === 'robot'; }
+    if (saved) { mouseWorld = saved === 'mouse'; robotWorld = saved === 'robot'; punchWorld = saved === 'punch'; }
     else mouseWorld = localStorage.getItem('flippydesk.mouse') === '1';
   } catch (e) { /* storage blocked */ }
-  document.body.dataset.world = robotWorld ? 'robot' : mouseWorld ? 'mouse' : 'human';
+  document.body.dataset.world = punchWorld ? 'punch' : robotWorld ? 'robot' : mouseWorld ? 'mouse' : 'human';
   try {
     flips = parseInt(localStorage.getItem('flippydesk.flips'), 10) || 0;
     best = parseInt(localStorage.getItem('flippydesk.best'), 10) || 0;
@@ -2586,6 +2587,7 @@
     weaponRound = false;
     clawMarks = null;
     cyborg = null;
+    pitchScene = null;
     tracers = [];
     flames = [];
     booms = [];
@@ -2603,6 +2605,8 @@
     buildDesk();
     buildItems();
     pickGameScreen();
+    buildTower();
+    pickGlove();
     placeDog();
     schedulePal();
     scheduleGust();
@@ -3348,6 +3352,8 @@
   }
 
   function launch(strength, side, sideways) {
+    // In Punch Tower a flip is an uppercut, straight up through the ceilings.
+    if (punchWorld) return startRun(strength);
     // In the robot world the desk goes way up, for target practice, while
     // the things on it scatter about as usual.
     const scatter = robotWorld ? strength * 1.7 : strength;
@@ -4397,11 +4403,32 @@
   let firing = null;          // the minigun's held trigger: { x, y }
   let beams = [];             // plasma beams, in screen space
   let rockets = [];           // rockets on the way: { sx, sy, tx, ty, t }
-  const arms = () => (robotWorld ? ROBOT_ARMS : mouseWorld ? MOUSE_WEAPONS : WEAPONS);
+  // Punch Pitcher's gym sells upgrades for the uppercut.
+  const PUNCH_ARMS = [
+    { id: 'sugar', gear: 'upgrade', name: 'Sugar rush', icon: '\u{1F36C}', price: 12000, blurb: 'A harder uppercut: the desk leaves a third faster.' },
+    { id: 'ice', gear: 'upgrade', name: 'Ice cube shield', icon: '\u{1F9CA}', price: 25000, blurb: 'Smashes through the first steel beam instead of stopping dead.' },
+    { id: 'party', gear: 'upgrade', name: 'Party size', icon: '\u{1F389}', price: 45000, blurb: 'A desk half again as wide hits half again as much.' },
+    { id: 'straw', gear: 'upgrade', name: 'Magnet straw', icon: '\u{1F9F2}', price: 80000, blurb: 'Slurps up anything within reach on the way past.' },
+  ];
+  // What stands on each floor of the tower, and what it's worth to hit.
+  const PUNCH_THINGS = {
+    desk: { name: 'Cubicle desk', pts: 150, say: 'desk flipped', w: 0.5, h: 0.34 },
+    cooler: { name: 'Water cooler', pts: 200, say: 'glug glug', w: 0.16, h: 0.52 },
+    copier: { name: 'Copier', pts: 250, say: 'paper jam!', w: 0.36, h: 0.42 },
+    plant: { name: 'Office plant', pts: 100, say: 'repotted', w: 0.2, h: 0.46 },
+    worker: { name: 'Coworker', pts: 300, say: 'splashed!', w: 0.2, h: 0.64 },
+    vending: { name: 'Vending machine', pts: 400, say: 'free snacks!', w: 0.32, h: 0.72 },
+    trophy: { name: 'Bowling trophy', pts: 350, say: 'strike!', w: 0.14, h: 0.3 },
+    boss: { name: 'The big boss', pts: 1500, say: 'CORNER OFFICE!', w: 0.62, h: 0.66 },
+    puddle: { name: '', pts: 0, say: 'punch boost!', w: 0.4, h: 0.06 },
+  };
+  const PUNCH_ITEM_NAMES = Object.values(PUNCH_THINGS).map((t) => t.name).filter(Boolean);
+  ITEM_NAMES.push(...PUNCH_ITEM_NAMES);
+  const arms = () => (punchWorld ? PUNCH_ARMS : robotWorld ? ROBOT_ARMS : mouseWorld ? MOUSE_WEAPONS : WEAPONS);
   const TRY_ALL = /[?&]armory\b/.test(location.search);
   let cash = 0;
   let owned = [];
-  const bankKey = (k) => (robotWorld ? `flippydesk.robot.${k}` : mouseWorld ? `flippydesk.mouse.${k}` : `flippydesk.${k}`);
+  const bankKey = (k) => (punchWorld ? `flippydesk.punch.${k}` : robotWorld ? `flippydesk.robot.${k}` : mouseWorld ? `flippydesk.mouse.${k}` : `flippydesk.${k}`);
 
   // Each world has its own bank; load the one for the world we're in.
   function loadBank() {
@@ -4442,9 +4469,9 @@
   function showBank(bump) {
     shopBtn.querySelector('.n').textContent = short(cash);
     const locked = storeLock();
-    shopBtn.querySelector('.boom').textContent = locked ? '\u{1F512}' : robotWorld ? '\u{1F916}' : mouseWorld ? '\u{1F9C0}' : '\u{1F6D2}';
+    shopBtn.querySelector('.boom').textContent = locked ? '\u{1F512}' : punchWorld ? '\u{1F9C3}' : robotWorld ? '\u{1F916}' : mouseWorld ? '\u{1F9C0}' : '\u{1F6D2}';
     if (wasLocked && !locked) {
-      toastEl.textContent = `The ${robotWorld ? 'SKYDESK ' : mouseWorld ? 'Mouse ' : ''}Armory is open!`;
+      toastEl.textContent = punchWorld ? 'The Gym is open!' : `The ${robotWorld ? 'SKYDESK ' : mouseWorld ? 'Mouse ' : ''}Armory is open!`;
       toastEl.classList.remove('show');
       void toastEl.offsetWidth;
       toastEl.classList.add('show');
@@ -4457,6 +4484,7 @@
     }
     arsenalEl.textContent = '';
     if (robotWorld) return showGuns();
+    if (punchWorld) return;   // the pro shop sells upgrades only
     for (const w of arms()) {
       if (!has(w.id)) continue;
       const b = document.createElement('button');
@@ -4475,9 +4503,9 @@
 
   function storeLock() {
     if (TRY_ALL) return null;
-    const mouseNames = new Set(MOUSE_ITEM_NAMES.concat(ROBOT_ITEM_NAMES));
+    const mouseNames = new Set(MOUSE_ITEM_NAMES.concat(ROBOT_ITEM_NAMES, PUNCH_ITEM_NAMES));
     const swagNames = new Set(UNLOCKS.map((u) => u.name));
-    const all = robotWorld ? ROBOT_ITEM_NAMES : mouseWorld
+    const all = punchWorld ? PUNCH_ITEM_NAMES : robotWorld ? ROBOT_ITEM_NAMES : mouseWorld
       ? MOUSE_ITEM_NAMES
       : ['Desk', ...ITEM_NAMES.filter((n) => !swagNames.has(n) && !mouseNames.has(n)), ...swagNames];
     const have = all.filter((name) => items[name] && items[name].flipped).length;
@@ -4487,9 +4515,11 @@
 
   function openStore() {
     const lock = storeLock();
-    storeEl.querySelector('h2').textContent = robotWorld ? 'SKYDESK Armory' : mouseWorld ? 'Mouse Armory' : 'Armory';
+    storeEl.querySelector('h2').textContent = punchWorld ? 'Punch Pitcher\u2019s Gym' : robotWorld ? 'SKYDESK Armory' : mouseWorld ? 'Mouse Armory' : 'Armory';
     storeEl.querySelector('.bank').textContent = lock
-      ? `Locked until you\u2019ve discovered 3/4 of the ${robotWorld ? 'robot ' : mouseWorld ? 'Mouse World ' : ''}items: ${lock.have} of ${lock.total} found, ${lock.need - lock.have} more to go. Your ${cash.toLocaleString()} points are saving up in the meantime.`
+      ? `Locked until you\u2019ve discovered 3/4 of the ${punchWorld ? 'Punch Tower ' : robotWorld ? 'robot ' : mouseWorld ? 'Mouse World ' : ''}items: ${lock.have} of ${lock.total} found, ${lock.need - lock.have} more to go. Your ${cash.toLocaleString()} points are saving up in the meantime.`
+      : punchWorld
+        ? `You have ${cash.toLocaleString()} Punch Tower points to spend. Every upgrade works on every uppercut.`
       : robotWorld
         ? `You have ${cash.toLocaleString()} robot-world points to spend. Upgrades fit every gun; new guns show up on the right to switch to.`
         : mouseWorld
@@ -4528,7 +4558,7 @@
           sfx.unlock();
           sfx.ding(true);
           if (robotWorld && w.gear === 'gun') equipGun(w.id);
-          toastEl.textContent = robotWorld ? `${w.name} ${w.gear === 'upgrade' ? 'installed' : 'acquired'}` : !mouseWorld && WEAPONS.every((x) => has(x.id)) ? 'You hear scratching under the desk\u2026' : `${w.name} acquired`;
+          toastEl.textContent = robotWorld && ROBOT_ARMS.every((x) => has(x.id)) ? 'You hear thumping behind the wall\u2026' : punchWorld || robotWorld ? `${w.name} ${w.gear === 'upgrade' ? 'installed' : 'acquired'}` : !mouseWorld && WEAPONS.every((x) => has(x.id)) ? 'You hear scratching under the desk\u2026' : `${w.name} acquired`;
           toastEl.classList.remove('show');
           void toastEl.offsetWidth;
           toastEl.classList.add('show');
@@ -5804,6 +5834,8 @@
     updateWeapon(dt);
     updateHole(dt);
     updateCyborg(dt);
+    updatePitchScene(dt);
+    updateRun(dt);
     updateGun(dt);
     for (const p of popups) p.t += dt;
     popups = popups.filter((p) => p.t < 1.4);
@@ -5816,7 +5848,7 @@
     } else if (state === 'flipped') {
       if (grab) heldUntil = stateT;
       const since = stateT - heldUntil;
-      if (robotWorld) {
+      if (robotWorld || punchWorld) {
         if (robotRoundOver(dt)) { state = 'fadeout'; stateT = 0; finishRound(); }
       } else if (since > RESET_AFTER) {
         let moving = false;
@@ -5831,7 +5863,7 @@
       fade = Math.max(0, 1 - stateT / (portal ? 0.8 : FADE));
       if (fade <= 0 && portal) {
         portal = null;
-        toastEl.textContent = robotWorld ? 'Flip it, then shoot the pieces!' : mouseWorld ? 'Welcome to Mouse World \u{1F9C0}' : 'Back to the big world';
+        toastEl.textContent = punchWorld ? 'Swipe and he uppercuts the desk. Steer it up!' : robotWorld ? 'Flip it, then shoot the pieces!' : mouseWorld ? 'Welcome to Mouse World \u{1F9C0}' : 'Back to the big world';
         toastEl.classList.remove('show');
         void toastEl.offsetWidth;
         toastEl.classList.add('show');
@@ -6055,13 +6087,14 @@
   let peekDue = 3;
   const HOLE_W = 0.17, HOLE_H = 0.2;
 
-  const holeOpen = () => mouseWorld || robotWorld || WEAPONS.every((w) => has(w.id));
+  const holeOpen = () => mouseWorld || robotWorld || punchWorld || WEAPONS.every((w) => has(w.id));
   const holeX = () => cx;
 
   // Switch worlds: 'human', 'mouse' or 'robot'.
   function setWorld(name) {
     mouseWorld = name === 'mouse';
     robotWorld = name === 'robot';
+    punchWorld = name === 'punch';
     document.body.dataset.world = name;
     try {
       localStorage.setItem('flippydesk.world', name);
@@ -6139,7 +6172,7 @@
   function enterHole() {
     if (state !== 'ready' || portal) return;
     // the hole always leads between the human and mouse worlds
-    portal = { to: mouseWorld || robotWorld ? 'human' : 'mouse', x: holeX() * ppm, y: (floorY - HOLE_H / 2) * ppm };
+    portal = { to: mouseWorld || robotWorld || punchWorld ? 'human' : 'mouse', x: holeX() * ppm, y: (floorY - HOLE_H / 2) * ppm };
     if (boss.mode === 'in') boss.mode = 'flee';
     if (pal.mode === 'in') pal.mode = 'flee';
     state = 'fadeout';
@@ -6384,10 +6417,10 @@
         if (b !== desk && sp > speedCap) b.setLinearVelocity(V(v.x * speedCap / sp, v.y * speedCap / sp));
       }
     }
-    const up = grab || stateT < 1 || bodies.some((b) => b.kind !== 'shard' && b.isAwake() &&
+    const up = grab || stateT < 1 || (run && !run.over) || bodies.some((b) => b.kind !== 'shard' && b.isAwake() &&
       b.getWorldCenter().y < floorY - 0.6 && b.getLinearVelocity().length() > 0.8 && airborne(b));
     downT = up ? 0 : downT + dt;
-    return downT > 1.5 || stateT > 9;
+    return downT > 1.5 || stateT > (punchWorld ? 20 : 9);
   }
 
   function mouseArmoryDone() {
@@ -6748,6 +6781,12 @@
       // pull back, and rise to follow the desk up
       target = ZOOM_OUT;
       rise = Math.max(0, (floorY - floorY / zoom) - (desk.getWorldCenter().y - 1));
+    } else if (punchWorld && state === 'flipped') {
+      // keep the desk low on screen so you can see the floors coming
+      target = ZOOM_OUT;
+      const span = H / (ppm * zoom);
+      const y = run && !run.over ? run.y : desk.getWorldCenter().y + 0.4;
+      rise = Math.max(0, (floorY - floorY / zoom) - (y - span * 0.72));
     }
     zoom += (target - zoom) * Math.min(1, dt * (target < zoom ? 6 : 1.5));
     if (Math.abs(zoom - target) < 0.001) zoom = target;
@@ -7323,15 +7362,630 @@
 
   Object.assign(ROOMS, ROBOT_ROOMS);
 
+  // ---------- Punch Pitcher's tower ----------
+  // Once the SKYDESK Armory is complete, a boxing glove turns up on some
+  // robot desks. Tap it and Punch Pitcher, a glass juice pitcher in boxing
+  // gloves, crashes through the wall and uppercuts you to his office tower.
+  // There every flip is an uppercut: the desk flies up through ceiling after
+  // ceiling while you steer it, and everything it hits piles up on top.
+
+  const FLOORS = 10;
+  const SLAB = 0.16;
+  let bldg = null;        // { fh, floors: [{ dept, wall, things, beams, holes }] }
+  let run = null;         // the desk on its way up
+  let rain = [];          // the haul, coming back down
+  let pitchScene = null;  // the crash-through-the-wall cutscene in the robot world
+  let punchGlove = null;   // the way in: a boxing glove on a robot desk
+  const pitcher = { throwT: 9 };
+  const DEPTS = ['ACCOUNTING', 'HR', 'LEGAL', 'IT', 'MARKETING', 'SALES', 'R&D', 'PAYROLL', 'COMPLIANCE', 'EXECUTIVE'];
+  const WALLS = ['#f3e9d8', '#e3eef5', '#efe3f0', '#e6f0e1', '#f5e6dc', '#e9e7f3', '#f1efdc', '#dfeceb', '#f2e1e1', '#e8e2d6'];
+
+  const robotArmoryDone = () => TRY_ALL || ROBOT_ARMS.every((w) => owned.includes(w.id));
+  const slabY = (k) => floorY - k * bldg.fh;   // top of floor k's slab
+
+  function buildTower() {
+    bldg = null;
+    run = null;
+    rain = [];
+    if (!punchWorld) return;
+    const fh = Math.max(2.2, floorY + 0.25);
+    const floors = [];
+    for (let k = 1; k <= FLOORS; k++) {
+      const things = [];
+      const top = k === FLOORS;
+      const pool = ['desk', 'desk', 'cooler', 'copier', 'plant', 'worker', 'worker', 'vending', 'trophy'];
+      let x = rand(0.25, 0.6);
+      if (top) things.push({ kind: 'boss', x: rand(Wm * 0.3, Wm * 0.7) });
+      while (x < Wm - 0.3) {
+        const kind = pick(pool);
+        const w = PUNCH_THINGS[kind].w;
+        if (x + w > Wm - 0.15) break;
+        if (!top || Math.abs(x + w / 2 - things[0].x) > 0.6) things.push({ kind, x: x + w / 2, c: pick(['#6b8fe6', '#e66b6b', '#5ab88a', '#f2c14e', '#9b6be6']) });
+        x += w + rand(0.25, 0.9);
+      }
+      if (chance(0.55)) things.push({ kind: 'puddle', x: rand(0.4, Wm - 0.4) });
+      // steel beams in the slab above this floor, never so many you can't get past
+      const beams = [];
+      if (k >= 2) {
+        const n = k < 4 ? randInt(0, 1) : randInt(1, 2);
+        for (let i = 0; i < n; i++) {
+          const bw = rand(0.35, 0.65);
+          const b0 = rand(0.1, Wm - bw - 0.1);
+          if (beams.every(([a, b]) => b0 > b + DESK_W * 1.3 || b0 + bw < a - DESK_W * 1.3)) beams.push([b0, b0 + bw]);
+        }
+      }
+      floors.push({ dept: DEPTS[k - 1], wall: WALLS[k - 1], things, beams, holes: [] });
+    }
+    bldg = { fh, floors };
+  }
+
+  // ----- the uppercut -----
+
+  function startRun(strength) {
+    const p = desk.getPosition();
+    run = {
+      x: p.x, y: p.y, ang: 0, target: p.x, t: 0,
+      vy: -(9.5 + clamp(strength, 0.3, 2.6) * 2.6) * (has('sugar') ? 1.3 : 1),
+      slab: 1, pile: [], shield: has('ice'), carried: [], over: false,
+    };
+    for (const b of bodies) {
+      const q = b.getPosition();
+      run.carried.push({ b, dx: q.x - p.x, dy: q.y - p.y, a: b.getAngle() });
+      b.setLinearVelocity(V(0, 0));
+      b.setAngularVelocity(0);
+      b.setKinematic();
+    }
+    pitcher.throwT = 0;
+    sfx.whoosh(2.4);
+    shake = Math.max(shake, 0.4);
+  }
+
+  function steer(px) {
+    if (run && !run.over) run.target = toWorld(px, 0).x;
+  }
+
+  function updateRun(dt) {
+    pitcher.throwT += dt;
+    for (const r of rain) {
+      r.vy += GRAVITY * dt;
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+      r.a += r.va * dt;
+    }
+    rain = rain.filter((r) => r.y < floorY + 0.2);
+    if (!run || run.over) return;
+    run.t += dt;
+    const reach = (DESK_W / 2) * (has('party') ? 1.5 : 1);
+    const lo = DESK_W / 2 + 0.02, hi = Wm - DESK_W / 2 - 0.02;
+    run.target = clamp(run.target, lo, hi);
+    const dx = run.target - run.x;
+    run.x = clamp(run.x + clamp(dx * 9, -8, 8) * dt, lo, hi);
+    run.ang += (clamp(dx * 0.2, -0.3, 0.3) - run.ang) * Math.min(1, dt * 6);
+    run.vy += 5 * dt;
+    run.y += run.vy * dt;
+    const ca = Math.cos(run.ang), sa = Math.sin(run.ang);
+    for (const c of run.carried) {
+      if (!bodies.includes(c.b)) continue;
+      c.b.setTransform(V(run.x + c.dx * ca - c.dy * sa, run.y + c.dx * sa + c.dy * ca), c.a + run.ang);
+    }
+    const pileH = Math.min(1.1, run.pile.length * 0.045);
+    const top = run.y - DESK_H - 0.4 - pileH;
+    const x0 = run.x - reach, x1 = run.x + reach;
+    // crash up through each ceiling
+    while (top < slabY(run.slab) + SLAB) {
+      if (run.slab > FLOORS) return endRun(true);
+      const f = bldg.floors[run.slab - 1];
+      const sy = slabY(run.slab);
+      const beam = f.beams.find((b) => !b.broken && b[1] > x0 && b[0] < x1);
+      if (beam) {
+        if (!run.shield) return endRun(false, 'clang! steel beam');
+        run.shield = false;
+        beam.broken = true;
+        sfx.shatter(1);
+        addPoints(500, 'ice cube shield!', run.x, sy);
+      }
+      f.holes.push([x0, x1]);
+      for (let i = 0; i < 10; i++) smoke.push({ x: run.x + rand(-reach, reach), y: sy + 0.05, r: rand(0.06, 0.14), t: -rand(0, 0.2), life: rand(1, 2), vx: rand(-0.4, 0.4), shade: rand(150, 200) });
+      for (let i = 0; i < 14; i++) confetti.push({ x: run.x + rand(-reach, reach), y: sy, vx: rand(-3, 3), vy: rand(-2, 2), a: rand(0, 6), spin: rand(-10, 10), c: pick(['#9a9590', '#bdb7ae', '#7d7872']), t: 0 });
+      run.vy *= 0.86;
+      shake = Math.max(shake, 0.35);
+      sfx.smash();
+      addPoints(100 * run.slab, `floor ${run.slab}!`, run.x, sy - 0.1);
+      run.slab++;
+    }
+    // everything standing in the desk's way comes along
+    const grab = has('straw') ? 0.45 : 0;
+    for (let k = 1; k <= FLOORS; k++) {
+      const fy = slabY(k);
+      if (fy < top - 1.2 || fy - 0.8 > run.y) continue;
+      for (const t of bldg.floors[k - 1].things) {
+        if (t.hit) continue;
+        const T = PUNCH_THINGS[t.kind];
+        if (t.x + T.w / 2 < x0 - grab || t.x - T.w / 2 > x1 + grab || fy < top || fy - T.h > run.y) continue;
+        t.hit = true;
+        if (t.kind === 'puddle') {
+          run.vy -= 3.5;
+          sfx.pour(0.4);
+          for (let i = 0; i < 16; i++) drops.push(Object.assign({ x: t.x + rand(-0.15, 0.15), y: fy - 0.03, vx: rand(-2, 2), vy: rand(-4, -1), r: rand(0.01, 0.025) }, PUNCH_SPLASH));
+        } else {
+          run.pile.push({ kind: t.kind, c: t.c, a: rand(-0.6, 0.6), ox: rand(-0.75, 0.75) });
+          run.vy *= t.kind === 'boss' ? 0.8 : 0.97;
+          itemStat(T.name).flipped++;
+          sfx.thud(0.6, 0.6);
+          if (t.kind === 'boss') shake = Math.max(shake, 0.8);
+        }
+        addPoints(T.pts, T.say, t.x, fy - T.h);
+      }
+    }
+    if (run.vy >= 0) endRun(false, `stalled on floor ${Math.max(0, run.slab - 1)}`);
+  }
+
+  const PUNCH_SPLASH = { color: '#e0304a', stain: 'rgba(224,48,74,0.55)' };
+
+  // The desk breaks out of the roof, or runs out of steam, and it all comes down.
+  function endRun(roof, why) {
+    run.over = true;
+    saveItems();
+    for (const c of run.carried) {
+      if (!bodies.includes(c.b)) continue;
+      c.b.setDynamic();
+      c.b.setAwake(true);
+      c.b.setLinearVelocity(roof ? V(rand(-3, 3), rand(-9, -4)) : V(rand(-0.5, 0.5), 0));
+      c.b.setAngularVelocity(roof ? rand(-6, 6) : rand(-1, 1));
+    }
+    const topY = run.y - DESK_H - 0.4;
+    for (const p of run.pile) {
+      rain.push({ kind: p.kind, c: p.c, x: run.x + p.ox, y: topY, vx: rand(-3, 3) + (roof ? 0 : p.ox), vy: roof ? rand(-10, -4) : rand(-2, 0), a: p.a, va: rand(-5, 5) });
+    }
+    if (roof) {
+      addPoints(3000 + run.pile.length * 200, 'THROUGH THE ROOF!', run.x, slabY(FLOORS + 1));
+      sfx.fanfare();
+      for (let i = 0; i < 60; i++) confetti.push({ x: run.x + rand(-1, 1), y: slabY(FLOORS + 1), vx: rand(-4, 4), vy: rand(-7, -2), a: rand(0, 6), spin: rand(-10, 10), c: pick(['#e0304a', '#ffd84d', '#5dc9ff', '#ffffff']), t: 0 });
+      shake = 1;
+    } else {
+      if (why.startsWith('clang')) { sfx.clang(); shake = Math.max(shake, 0.6); }
+      addPoints(0, why, run.x, run.y - DESK_H - 0.6);
+    }
+  }
+
+  // ----- the way in, from the robot world -----
+
+  // A red boxing glove, cuff down, glowing a little so it gets noticed.
+  function drawBoxingGlove(r, color) {
+    ellipse(0.1 * r, -0.15 * r, 0.6 * r, 0.5 * r, color);
+    ctx.beginPath();
+    ctx.ellipse(-0.05 * r, -0.05 * r, 0.82 * r, 0.78 * r, 0, 0, Math.PI * 2);
+    finish(color);
+    ellipse(-0.25 * r, -0.35 * r, 0.22 * r, 0.14 * r, 'rgba(255,255,255,0.35)', false);
+    rrect(-0.55 * r, 0.55 * r, 1.0 * r, 0.45 * r, 0.12 * r, '#fbfaf5');
+    line(-0.5 * r, 0.75 * r, 0.4 * r, 0.75 * r, color, 0.12 * r);
+  }
+
+  function pickGlove() {
+    punchGlove = null;
+    if (!robotWorld || !robotArmoryDone() || !chance(0.35)) return;
+    punchGlove = addBody(cx + rand(-DESK_W / 3, DESK_W / 3), floorY - DESK_H - 0.6, [R(0, 0, 0.12, 0.13)], () => {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ellipse(0, 0, 0.13, 0.13, `rgba(255,200,180,${0.15 + 0.15 * Math.sin(clock * 4)})`, false);
+      ctx.restore();
+      drawBoxingGlove(0.075, '#d8303e');
+    }, { kind: 'punchGlove', density: 0.6, item: 'Boxing glove' });
+  }
+
+  function onGlove(px, py) {
+    if (!punchGlove || !bodies.includes(punchGlove) || state !== 'ready' || pitchScene || cyborg) return false;
+    const p = toWorld(px, py);
+    const c = punchGlove.getWorldCenter();
+    return Math.hypot(p.x - c.x, p.y - c.y) < 0.16;
+  }
+
+  function startPitchScene() {
+    if (pitchScene || portal || state !== 'ready') return;
+    pitchScene = { t: 0 };
+    if (boss.mode === 'in') boss.mode = 'flee';
+    if (pal.mode === 'in') pal.mode = 'flee';
+  }
+
+  const holeInWallX = () => Math.max(0.35, cx - DESK_W / 2 - 0.7);
+
+  function updatePitchScene(dt) {
+    if (!pitchScene) return;
+    const s = pitchScene;
+    s.t += dt;
+    if (s.t > 0.2 && s.t < 0.9 && s.t > (s.knocks || 0) * 0.3 + 0.2) { s.knocks = (s.knocks || 0) + 1; sfx.thud(1, 1); shake = Math.max(shake, 0.25); }
+    if (s.t > 1.0 && !s.burst) {
+      s.burst = true;
+      sfx.smash();
+      sfx.boom(0.6);
+      shake = 1;
+      const x = holeInWallX();
+      for (let i = 0; i < 40; i++) confetti.push({ x: x + rand(-0.4, 0.4), y: floorY - rand(0.2, 1.4), vx: rand(1, 6), vy: rand(-5, 0), a: rand(0, 6), spin: rand(-10, 10), c: pick(['#8a6a5a', '#a9a39a', '#5b6170', '#c4512a']), t: 0 });
+      for (let i = 0; i < 12; i++) smoke.push({ x: x + rand(-0.4, 0.4), y: floorY - rand(0.2, 1.4), r: rand(0.1, 0.2), t: -rand(0, 0.2), life: rand(1.5, 2.5), vx: rand(-0.2, 0.6), shade: rand(120, 170) });
+    }
+    if (s.t > 1.3 && !s.said) { s.said = true; sfx.mumble(5, 0.9); }
+    if (s.t > 2.75 && !s.threw) {
+      // the uppercut: the robot desk and everything on it goes through the ceiling
+      s.threw = true;
+      sfx.whoosh(2.4);
+      sfx.smash();
+      shake = 1;
+      for (const b of bodies) {
+        if (b.getType() !== 'dynamic') continue;
+        b.setAwake(true);
+        b.setLinearVelocity(V(rand(-1, 1), -rand(12, 16)));
+        b.setAngularVelocity(rand(-3, 3));
+      }
+    }
+    if (s.t > 3.7 && !portal) {
+      portal = { to: 'punch', x: W / 2, y: H / 2 };
+      state = 'fadeout';
+      stateT = 0;
+    }
+  }
+
+  // ----- drawing -----
+
+  // Punch Pitcher: a glass pitcher of fruit punch in boxing gloves, trunks and
+  // a headband. pose: guard up, then the uppercut as `punchK` runs 0..1:
+  // a crouch and a dip of the right glove, then it drives up past his head.
+  function drawPitcher(x, walk, punchK, talk) {
+    ctx.save();
+    ctx.translate(x, floorY);
+    const step = Math.sin(walk * 7) * (walk > 0 ? 1 : 0);
+    const dip = punchK > 0 && punchK < 0.4 ? punchK / 0.4 : 0;
+    const drive = punchK >= 0.4 && punchK < 1 ? Math.min(1, (punchK - 0.4) / 0.25) : 0;
+    const bob = walk > 0 ? Math.abs(Math.sin(walk * 7)) * 0.03 : Math.sin(clock * 6) * 0.012;
+    const crouch = Math.sin(dip * Math.PI * 0.5) * 0.12 * (1 - drive) - drive * 0.06;
+    // legs in a boxer's stance: bare punch-red shins, white boots
+    for (const [hip, foot] of [[-0.09, -0.2 + step * 0.07], [0.09, 0.2 - step * 0.07]]) {
+      line(hip, -0.6 + crouch, foot, -0.08, INK, 0.1);
+      line(hip, -0.6 + crouch, foot, -0.08, '#f0a07a', 0.075);
+      rrect(foot - 0.075, -0.14, 0.15, 0.1, 0.03, '#fbfaf5');
+      line(foot - 0.06, -0.12, foot + 0.06, -0.12, '#d8303e', 0.012);
+      rrect(foot - 0.085, -0.05, 0.17, 0.05, 0.02, '#1d1c22', false);
+    }
+    ctx.translate(0, crouch - bob);
+    // shiny gold trunks with a red stripe
+    ctx.beginPath();
+    ctx.moveTo(-0.27, -0.66);
+    ctx.lineTo(0.27, -0.66);
+    ctx.lineTo(0.3, -0.46);
+    ctx.lineTo(0.03, -0.46);
+    ctx.lineTo(0, -0.54);
+    ctx.lineTo(-0.03, -0.46);
+    ctx.lineTo(-0.3, -0.46);
+    ctx.closePath();
+    finish('#f2c14e');
+    line(-0.29, -0.5, -0.27, -0.66, '#d8303e', 0.025);
+    line(0.29, -0.5, 0.27, -0.66, '#d8303e', 0.025);
+    rrect(-0.28, -0.7, 0.56, 0.07, 0.02, '#fbfaf5');
+    // the pitcher: a glass body full of punch, a handle and a spout
+    ctx.lineWidth = 0.03;
+    ctx.strokeStyle = INK;
+    ctx.beginPath();
+    ctx.arc(-0.33, -1.0, 0.12, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.stroke();
+    ctx.lineWidth = 0.018;
+    ctx.strokeStyle = '#d9eef7';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-0.26, -1.36);
+    ctx.lineTo(0.22, -1.36);
+    ctx.lineTo(0.34, -1.44);
+    ctx.lineTo(0.3, -1.3);
+    ctx.quadraticCurveTo(0.34, -0.8, 0.26, -0.68);
+    ctx.lineTo(-0.26, -0.68);
+    ctx.quadraticCurveTo(-0.34, -0.8, -0.26, -1.36);
+    ctx.closePath();
+    finish('rgba(214,236,250,0.55)');
+    // the punch inside, sloshing
+    const slosh = Math.sin(clock * 3) * 0.02 + drive * 0.06;
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#e0304a';
+    ctx.beginPath();
+    ctx.moveTo(-0.4, -1.18 + slosh);
+    ctx.quadraticCurveTo(0, -1.24 - slosh, 0.4, -1.18 - slosh);
+    ctx.lineTo(0.4, -0.5);
+    ctx.lineTo(-0.4, -0.5);
+    ctx.fill();
+    for (const [bx, by] of [[-0.12, -0.8], [0.1, -0.95], [0.02, -0.76]]) ellipse(bx, by + Math.sin(clock * 2 + bx * 9) * 0.01, 0.025, 0.025, 'rgba(255,255,255,0.35)', false);
+    ellipse(0.14, -1.2 - slosh, 0.06, 0.025, '#ffb33d', false);
+    ctx.restore();
+    line(-0.22, -1.3, -0.24, -0.76, 'rgba(255,255,255,0.6)', 0.02);
+    // face on the glass: fierce brows, big grin
+    const blink = clock % 3.2 < 0.12;
+    for (const s of [-1, 1]) {
+      ellipse(s * 0.08, -1.02, 0.045, blink ? 0.008 : 0.05, '#ffffff');
+      if (!blink) ellipse(s * 0.08 + 0.01, -1.01, 0.02, 0.022, INK, false);
+    }
+    line(-0.14, -1.12, -0.04, -1.08, INK, 0.016);
+    line(0.14, -1.12, 0.04, -1.08, INK, 0.016);
+    ctx.beginPath();
+    ctx.moveTo(-0.1, -0.92);
+    ctx.quadraticCurveTo(0, talk ? -0.76 : -0.84, 0.1, -0.92);
+    ctx.closePath();
+    ctx.fillStyle = talk ? '#7a1020' : '#fbfaf5';
+    ctx.fill();
+    ctx.lineWidth = 0.016;
+    ctx.strokeStyle = INK;
+    ctx.stroke();
+    // a sweatband around the rim, tails flapping behind
+    rrect(-0.27, -1.36, 0.53, 0.07, 0.02, '#d8303e');
+    const flap = Math.sin(clock * 9) * 0.03;
+    line(-0.26, -1.33, -0.4, -1.28 + flap, '#d8303e', 0.035);
+    line(-0.26, -1.33, -0.38, -1.22 - flap, '#d8303e', 0.035);
+    // arms: guard up; on the uppercut the right glove dips and drives up past his head
+    const glove = (sx, sy, hx, hy, rot) => {
+      line(sx, sy, hx, hy, INK, 0.06);
+      line(sx, sy, hx, hy, '#f0a07a', 0.04);
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(rot);
+      drawBoxingGlove(0.1, '#d8303e');
+      ctx.restore();
+    };
+    glove(-0.3, -0.98, -0.36, -0.84 + Math.sin(clock * 6 + 1) * 0.02, 0.3);
+    let rx, ry, rot;
+    if (drive) { rx = 0.42 + drive * 0.12; ry = -0.78 - drive * 0.95; rot = -0.2 + drive * 0.2; }
+    else if (dip) { rx = 0.38 + dip * 0.06; ry = -0.86 + dip * 0.16; rot = -0.6 * dip; }
+    else { rx = 0.38; ry = -0.86 + Math.sin(clock * 6) * 0.02; rot = -0.3; }
+    glove(0.3, -0.98, rx, ry, rot);
+    if (drive > 0 && drive < 1) for (let i = 1; i <= 3; i++) line(rx - 0.1 * i, ry + 0.2 + i * 0.05, rx - 0.1 * i, ry + 0.45 + i * 0.05, 'rgba(255,255,255,0.8)', 0.018);
+    ctx.restore();
+  }
+
+  function pitcherSpot() {
+    return Math.max(0.4, cx - DESK_W / 2 - 0.55);
+  }
+
+  // In his own tower he stands by the desk, waiting to uppercut it.
+  function drawTowerPitcher() {
+    if (!punchWorld) return;
+    const k = pitcher.throwT < 0.6 ? 0.4 + pitcher.throwT : 0;
+    drawPitcher(pitcherSpot(), 0, Math.min(0.999, k), pitcher.throwT < 0.8);
+    if (pitcher.throwT < 1.2) speech(pitcherSpot(), floorY - 1.75, 'OH HECK YEAH!');
+  }
+
+  function speech(x, y, text) {
+    ctx.save();
+    ctx.font = '700 0.08px ui-rounded, system-ui, sans-serif';
+    const bw = ctx.measureText(text).width + 0.14;
+    const bx = clamp(x - bw / 2, 0.1, Wm - bw - 0.1), by = Math.max(0.15, y);
+    rrect(bx, by, bw, 0.14, 0.05, '#ffffff');
+    ctx.fillStyle = INK;
+    ctx.fillText(text, bx + 0.07, by + 0.1);
+    ctx.restore();
+  }
+
+  // The robot-world cutscene: thumps behind the wall, then he crashes through.
+  function drawPitchScene() {
+    if (!pitchScene) return;
+    const s = pitchScene;
+    const hx = holeInWallX();
+    if (s.t < 1.0) {
+      // cracks spreading across the wall
+      const k = s.t;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 0.012;
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(hx, floorY - 0.8);
+        ctx.lineTo(hx + Math.cos(a) * 0.6 * k, floorY - 0.8 + Math.sin(a) * 0.6 * k);
+        ctx.lineTo(hx + Math.cos(a + 0.3) * 0.75 * k, floorY - 0.8 + Math.sin(a + 0.3) * 0.75 * k);
+        ctx.stroke();
+      }
+    } else {
+      // the hole he left, and him coming through it
+      ctx.fillStyle = '#1d1c22';
+      ctx.beginPath();
+      for (let i = 0; i <= 12; i++) {
+        const a = (i / 12) * Math.PI * 2, r = 0.62 + (i % 2 ? 0.1 : -0.05);
+        const px = hx + Math.cos(a) * r * 0.8, py = floorY - 0.78 + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, Math.min(floorY, py));
+      }
+      ctx.fill();
+      const walkK = clamp((s.t - 1.0) / 0.5, 0, 1);
+      const x = hx + (Math.min(Wm - 0.5, cx - DESK_W / 2 + 0.2) - hx) * walkK;
+      drawPitcher(x, walkK < 1 ? s.t : 0, s.t > 2.3 ? Math.min(0.999, (s.t - 2.3) / 0.9) : 0, s.t > 1.3 && s.t < 2.3);
+      if (s.t > 1.3 && s.t < 3.7) speech(x, floorY - 1.8, s.t < 2.4 ? 'OH HECK YEAH!' : 'DING DING!');
+    }
+  }
+
+  // A cross-section of the tower above the office.
+  function drawTowerFloors() {
+    if (!bldg) return;
+    const fh = bldg.fh;
+    for (let k = 1; k <= FLOORS; k++) {
+      const f = bldg.floors[k - 1];
+      const fy = slabY(k);
+      // the room on this floor
+      ctx.fillStyle = f.wall;
+      ctx.fillRect(0, fy - fh + SLAB, Wm, fh - SLAB);
+      for (let x = 0.3; x < Wm - 0.4; x += 1.1) rrect(x, fy - fh * 0.75, 0.6, fh * 0.42, 0.02, '#bfe3f5', false);
+      ctx.save();
+      ctx.translate(0.15, fy - fh + SLAB + 0.25);
+      ctx.scale(0.001, 0.001);
+      ctx.font = '900 120px ui-rounded, system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(42,39,51,0.25)';
+      ctx.fillText(`${k}F ${f.dept}`, 0, 0);
+      ctx.restore();
+      for (const t of f.things) if (!t.hit) drawThing(t.kind, t.x, fy, t.c);
+      // the slab this floor stands on, with holes where the desk came through
+      drawSlab(fy, f.holes, k > 1 ? bldg.floors[k - 2].beams : []);
+    }
+    // the roof, then sky
+    drawSlab(slabY(FLOORS + 1), run && run.over && run.slab > FLOORS ? [[run.x - DESK_W / 2, run.x + DESK_W / 2]] : [], bldg.floors[FLOORS - 1].beams);
+    // the outside walls
+    rrect(-0.6, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, '#8a6a5a', false);
+    rrect(Wm, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, '#8a6a5a', false);
+  }
+
+  function drawSlab(y, holes, beams) {
+    const cuts = holes.slice().sort((a, b) => a[0] - b[0]);
+    let x = -0.6;
+    const seg = (a, b) => { if (b > a) rrect(a, y, b - a, SLAB, 0, '#a9a39a', false); };
+    for (const [a, b] of cuts) { seg(x, a); x = Math.max(x, b); }
+    seg(x, Wm + 0.6);
+    for (const [a, b] of cuts) {
+      for (let i = 0; i < 4; i++) {
+        poly([[a + i * 0.08, y], [a + i * 0.08 + 0.05, y + SLAB * 0.6], [a + i * 0.08 + 0.1, y]], '#a9a39a', false);
+        poly([[b - i * 0.08, y + SLAB], [b - i * 0.08 - 0.05, y + SLAB * 0.4], [b - i * 0.08 - 0.1, y + SLAB]], '#a9a39a', false);
+      }
+    }
+    for (const bm of beams) {
+      if (bm.broken) continue;
+      rrect(bm[0], y - 0.02, bm[1] - bm[0], SLAB + 0.04, 0.01, '#c4512a');
+      for (let rx = bm[0] + 0.05; rx < bm[1] - 0.02; rx += 0.08) ellipse(rx, y + SLAB / 2, 0.01, 0.01, '#7a2a12', false);
+    }
+  }
+
+  function drawThing(kind, x, fy, c) {
+    switch (kind) {
+      case 'desk':
+        rrect(x - 0.25, fy - 0.34, 0.5, 0.04, 0.01, '#b07a4f');
+        line(x - 0.22, fy - 0.3, x - 0.22, fy, INK, 0.02);
+        line(x + 0.22, fy - 0.3, x + 0.22, fy, INK, 0.02);
+        rrect(x - 0.1, fy - 0.52, 0.2, 0.15, 0.01, '#2a2d36');
+        rrect(x - 0.085, fy - 0.505, 0.17, 0.12, 0.005, '#7ec8f0', false);
+        break;
+      case 'cooler':
+        rrect(x - 0.07, fy - 0.3, 0.14, 0.3, 0.01, '#f4f4f6');
+        ctx.beginPath();
+        ctx.ellipse(x, fy - 0.42, 0.075, 0.11, 0, 0, Math.PI * 2);
+        finish('rgba(120,190,240,0.75)');
+        break;
+      case 'copier':
+        rrect(x - 0.18, fy - 0.36, 0.36, 0.36, 0.02, '#c9ccd3');
+        rrect(x - 0.18, fy - 0.42, 0.36, 0.06, 0.01, '#7d8796');
+        ellipse(x + 0.12, fy - 0.3, 0.012, 0.012, blink(x, 2) ? '#5dff8a' : '#2a6a3a', false);
+        rrect(x - 0.12, fy - 0.2, 0.2, 0.03, 0.005, '#f4f4f6', false);
+        break;
+      case 'plant':
+        rrect(x - 0.07, fy - 0.16, 0.14, 0.16, 0.02, '#c96f4a');
+        for (const [lx, ly] of [[-0.07, -0.4], [0.06, -0.44], [0, -0.48], [-0.1, -0.3], [0.1, -0.32]]) ellipse(x + lx, fy + ly, 0.05, 0.09, '#5ab88a');
+        break;
+      case 'worker': {
+        line(x - 0.04, fy - 0.3, x - 0.05, fy, INK, 0.035);
+        line(x + 0.04, fy - 0.3, x + 0.05, fy, INK, 0.035);
+        rrect(x - 0.08, fy - 0.52, 0.16, 0.24, 0.04, c || '#6b8fe6');
+        line(x, fy - 0.5, x, fy - 0.36, '#e04a55', 0.02);
+        ellipse(x, fy - 0.58, 0.065, 0.07, '#e3b48f');
+        const panic = Math.sin(clock * 9 + x * 4) > 0;
+        line(x - 0.08, fy - 0.48, x - 0.16, panic ? fy - 0.62 : fy - 0.36, INK, 0.025);
+        line(x + 0.08, fy - 0.48, x + 0.16, panic ? fy - 0.36 : fy - 0.62, INK, 0.025);
+        ellipse(x - 0.02, fy - 0.59, 0.01, 0.012, INK, false);
+        ellipse(x + 0.025, fy - 0.59, 0.01, 0.012, INK, false);
+        break;
+      }
+      case 'vending':
+        rrect(x - 0.16, fy - 0.72, 0.32, 0.72, 0.02, '#c8323f');
+        rrect(x - 0.12, fy - 0.66, 0.17, 0.44, 0.01, '#bfe3f5', false);
+        for (let r = 0; r < 4; r++) for (let q = 0; q < 3; q++) rrect(x - 0.11 + q * 0.055, fy - 0.64 + r * 0.105, 0.04, 0.07, 0.008, ['#ffd84d', '#5ab88a', '#6b8fe6'][(r + q) % 3], false);
+        rrect(x + 0.07, fy - 0.5, 0.05, 0.12, 0.01, '#2a2d36', false);
+        break;
+      case 'trophy':
+        rrect(x - 0.06, fy - 0.06, 0.12, 0.06, 0.01, '#5a3a24');
+        line(x, fy - 0.06, x, fy - 0.14, '#e0b84a', 0.02);
+        ctx.beginPath();
+        ctx.ellipse(x, fy - 0.2, 0.06, 0.07, 0, 0, Math.PI);
+        ctx.closePath();
+        finish('#f2c14e');
+        ellipse(x, fy - 0.27, 0.025, 0.035, '#fbfaf5');
+        break;
+      case 'boss':
+        rrect(x - 0.31, fy - 0.36, 0.62, 0.06, 0.01, '#6b3f22');
+        rrect(x - 0.29, fy - 0.3, 0.58, 0.3, 0.01, '#5a3a24');
+        rrect(x - 0.1, fy - 0.66, 0.2, 0.3, 0.05, '#1d1c22');
+        ellipse(x, fy - 0.6, 0.06, 0.065, '#e3b48f');
+        rrect(x - 0.06, fy - 0.67, 0.12, 0.03, 0.01, '#9aa0aa', false);
+        line(x, fy - 0.53, x, fy - 0.42, '#e04a55', 0.02);
+        break;
+      case 'puddle':
+        ctx.fillStyle = 'rgba(224,48,74,0.85)';
+        ctx.beginPath();
+        ctx.ellipse(x, fy - 0.01, 0.2, 0.03, 0, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+    }
+  }
+
+  // The haul piled on the desk, and the same haul raining back down.
+  function drawRunPile() {
+    if (run && !run.over && run.pile.length) {
+      const topY = run.y - DESK_H;
+      ctx.save();
+      ctx.translate(run.x, topY);
+      ctx.rotate(run.ang);
+      run.pile.forEach((p, i) => {
+        const row = Math.floor(i / 5);
+        ctx.save();
+        ctx.translate(p.ox * (1 - row * 0.12), -row * 0.12 - 0.05);
+        ctx.rotate(p.a);
+        ctx.scale(0.55, 0.55);
+        drawThing(p.kind, 0, 0.2, p.c);
+        ctx.restore();
+      });
+      ctx.restore();
+    }
+    for (const r of rain) {
+      ctx.save();
+      ctx.translate(r.x, r.y);
+      ctx.rotate(r.a);
+      ctx.scale(0.55, 0.55);
+      drawThing(r.kind, 0, 0.2, r.c);
+      ctx.restore();
+    }
+  }
+
+  const PUNCH_ROOMS = {
+    // The ground floor of Punch Pitcher's tower: bright, corporate, sticky.
+    lobby: {
+      ink: '#2a2733', fade: '#f6efe4', punch: true,
+      draw() {
+        bigFill('#8fd0f2', '#dff1fb');
+        // the city behind the tower
+        for (const s of room.skyline) {
+          const bx = -Wm * 2 + s.x * Wm * 5, bh = s.h * 3;
+          rrect(bx, floorY - bh, s.w * 2, bh, 0, 'rgba(120,140,160,0.45)', false);
+        }
+        drawTowerFloors();
+        // the lobby itself
+        ctx.fillStyle = '#f6efe4';
+        ctx.fillRect(0, slabY(1) + SLAB, Wm, floorY - slabY(1) - SLAB);
+        const w = windowSpot();
+        rrect(w.wx, w.wy, w.ww, w.wh, 0.03, '#bfe3f5');
+        for (const s of splatsPunch) ellipse(s[0], s[1], s[2], s[2] * 0.7, 'rgba(224,48,74,0.35)', false);
+        ctx.save();
+        ctx.translate(Math.max(0.15, cx - DESK_W / 2 - 0.9), Math.max(0.3, w.wy + 0.1));
+        ctx.scale(0.001, 0.001);
+        ctx.font = '900 110px ui-rounded, system-ui, sans-serif';
+        ctx.fillStyle = '#e0304a';
+        ctx.fillText('PUNCH TOWER', 0, 0);
+        ctx.font = '700 46px ui-rounded, system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(42,39,51,0.6)';
+        ctx.fillText('Home of the Uppercut · Est. 1987', 0, 70);
+        ctx.restore();
+        rrect(-0.6, floorY, Wm + 1.2, Hm * 2, 0, '#c9b28f', false);
+        ctx.fillStyle = 'rgba(0,0,0,0.06)';
+        for (let x = 0; x < Wm; x += 0.4) ctx.fillRect(x, floorY, 0.012, Hm);
+      },
+    },
+  };
+  const splatsPunch = [];
+  Object.assign(ROOMS, PUNCH_ROOMS);
+
 
 
   // Keep the current room most of the time; now and then move somewhere new.
   function pickRoom() {
-    const inWorld = (t) => !!t.mouse === mouseWorld && !!t.robot === robotWorld;
+    const inWorld = (t) => !!t.mouse === mouseWorld && !!t.robot === robotWorld && !!t.punch === punchWorld;
     const sameWorld = room && inWorld(room.theme);
     if (sameWorld && !chance(0.35)) return;
     const names = Object.keys(ROOMS).filter((n) => inWorld(ROOMS[n]) && (!room || n !== room.name));
-    const name = !room && !mouseWorld && !robotWorld ? 'home' : names.length ? pick(names) : room.name;
+    const name = !room && !mouseWorld && !robotWorld && !punchWorld ? 'home' : names.length ? pick(names) : room.name;
     room = {
       name,
       theme: ROOMS[name],
@@ -7419,6 +8073,9 @@
     for (const c of cats) drawCat(c);
     drawDog();
     drawCyborg();
+    drawPitchScene();
+    drawTowerPitcher();
+    drawRunPile();
     drawClouds();
     drawBossBubble();
     drawPalBubble();
@@ -7514,6 +8171,11 @@
   canvas.addEventListener('pointerdown', (e) => {
     sfx.unlock();
     if (cyborg) return;
+    if (punchWorld && state === 'flipped') {
+      steer(e.clientX);
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      return;
+    }
     if (robotWorld && state === 'flipped' && !grab) {
       if (gunId === 'minigun') {
         firing = { x: e.clientX, y: e.clientY };
@@ -7523,6 +8185,7 @@
       return;
     }
     if (state !== 'ready') return;
+    if (onGlove(e.clientX, e.clientY)) { startPitchScene(); return; }
     if (onGameScreen(e.clientX, e.clientY)) { startCyborg(); return; }
     if (e.clientY < deskTopPx() - 30) return;  // swipes start at the desk, not above it
     swipe = { x0: e.clientX, y0: e.clientY, t0: performance.now(), peak: 0, vyNow: 0, vx: 0, pts: [[e.clientX, e.clientY, performance.now()]] };
@@ -7530,6 +8193,7 @@
   });
   canvas.addEventListener('pointermove', (e) => {
     if (firing) { firing.x = e.clientX; firing.y = e.clientY; return; }
+    if (run && !run.over && (e.buttons || e.pointerType === 'mouse')) steer(e.clientX);
     if (!swipe) {
       canvas.style.cursor = state === 'ready' && (onHole(e.clientX, e.clientY) || onGameScreen(e.clientX, e.clientY)) ? 'pointer' : '';
       return;
@@ -7576,6 +8240,11 @@
       return;
     }
     if (e.target.closest && e.target.closest('button')) return;
+    if (run && !run.over && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+      e.preventDefault();
+      run.target = run.x + (e.code === 'ArrowLeft' ? -1 : 1) * 0.8;
+      return;
+    }
     if (e.code === 'Space' || e.code === 'ArrowUp') {
       e.preventDefault();
       flip(rand(1, 1.8), chance(0.5) ? 1 : -1, rand(-0.4, 0.4));
@@ -7607,6 +8276,7 @@
   window.flippyDesk = {
     flip: (s = 1.2) => flip(s, 1, 0),
     get state() { return state; },
+    glove: () => { if (!punchGlove || !bodies.includes(punchGlove)) return null; const c = punchGlove.getWorldCenter(); return { x: W / 2 + (c.x - cx) * ppm * zoom, y: floorY * ppm - (floorY - c.y - lift) * ppm * zoom }; },
     get score() { return score; },
     get hang() { return hang; },
     get bodies() { return bodies.length; },
