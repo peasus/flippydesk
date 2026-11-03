@@ -2596,10 +2596,12 @@
     world.on('begin-contact', onBeginContact);
 
     ground = world.createBody();
-    floorFix = ground.createFixture(pl.Box(Wm, 1, V(Wm / 2, floorY + 1)), { friction: 0.8 });
+    // Punch Tower is far wider than the screen, so its floor and walls are too.
+    const gL = punchWorld ? towerL() : 0, gR = punchWorld ? towerR() : Wm, gH = punchWorld ? 120 : 20;
+    floorFix = ground.createFixture(pl.Box(gR - gL, 1, V((gL + gR) / 2, floorY + 1)), { friction: 0.8 });
     // Frictionless side walls so things slide down them instead of sticking.
-    ground.createFixture(pl.Box(0.5, 20, V(-0.5, floorY - 19)), { friction: 0 });
-    ground.createFixture(pl.Box(0.5, 20, V(Wm + 0.5, floorY - 19)), { friction: 0 });
+    ground.createFixture(pl.Box(0.5, gH, V(gL - 0.5, floorY - gH + 1)), { friction: 0 });
+    ground.createFixture(pl.Box(0.5, gH, V(gR + 0.5, floorY - gH + 1)), { friction: 0 });
 
     pickRoom();
     buildDesk();
@@ -6425,7 +6427,7 @@
     const up = grab || stateT < 1 || (run && !run.over) || bodies.some((b) => b.kind !== 'shard' && b.isAwake() &&
       b.getWorldCenter().y < floorY - 0.6 && b.getLinearVelocity().length() > 0.8 && airborne(b));
     downT = up ? 0 : downT + dt;
-    return downT > 1.5 || stateT > (punchWorld ? 20 : 9);
+    return downT > 1.5 || stateT > (punchWorld ? 40 : 9);
   }
 
   function mouseArmoryDone() {
@@ -7376,14 +7378,18 @@
   // through ceiling after ceiling while you drag it around fans and beams,
   // and everything it hits piles up on top.
 
-  const FLOORS = 10;
+  const FLOORS = 20;
   const SLAB = 0.16;
   let bldg = null;        // { fh, floors: [{ dept, wall, things, beams, holes }] }
   let run = null;         // the desk on its way up
   let rain = [];          // the haul, coming back down
   let pitchScene = null;  // the crash-through-the-wall cutscene in the robot world
   const pitcher = { throwT: 9 };
-  const DEPTS = ['ACCOUNTING', 'HR', 'LEGAL', 'IT', 'MARKETING', 'SALES', 'R&D', 'PAYROLL', 'COMPLIANCE', 'EXECUTIVE'];
+  const DEPTS = ['MAILROOM', 'ACCOUNTING', 'HR', 'PULP DIVISION', 'LEGAL', 'IT', 'MARKETING', 'SQUEEZE LAB', 'SALES', 'PAYROLL',
+    'R&D', 'CONCENTRATE', 'COMPLIANCE', 'SEED FUND', 'BRANDING', 'ZEST OPS', 'STRATEGY', 'BOARD ROOM', 'VP FLOOR', 'EXECUTIVE'];
+  const POSTERS = ['SQUEEZE THE DAY', 'PULP FRICTION', 'JUICE IT UP', 'STAY FRESH', 'ZEST IN SHOW', 'NO PULP NO GLORY', 'BE THE BLEND', 'CONCENTRATE!', 'FRESH IDEAS', 'THINK OUTSIDE THE CARTON'];
+  const VEGGIES = ['carrot', 'broccoli', 'eggplant', 'tomato', 'corn', 'mushroom'];
+  const THING_S = 1.6;   // things in the tower are drawn and hit at this scale
   const WALLS = ['#f3e9d8', '#e3eef5', '#efe3f0', '#e6f0e1', '#f5e6dc', '#e9e7f3', '#f1efdc', '#dfeceb', '#f2e1e1', '#e8e2d6'];
 
   const robotArmoryDone = () => TRY_ALL || ROBOT_ARMS.every((w) => owned.includes(w.id));
@@ -7413,9 +7419,9 @@
       while (x < R - 0.3) {
         const kind = pick(pool);
         const w = PUNCH_THINGS[kind].w;
-        if (x + w > R - 0.15) break;
-        if (!top || Math.abs(x + w / 2 - things[0].x) > 0.6) things.push({ kind, x: x + w / 2, c: pick(['#6b8fe6', '#e66b6b', '#5ab88a', '#f2c14e', '#9b6be6']) });
-        x += w + rand(0.4, 1.4);
+        if (x + w * THING_S > R - 0.15) break;
+        if (!top || Math.abs(x + w * THING_S / 2 - things[0].x) > 1) things.push({ kind, x: x + w * THING_S / 2, c: kind === 'worker' ? pick(VEGGIES) : pick(['#6b8fe6', '#e66b6b', '#5ab88a', '#f2c14e', '#9b6be6']) });
+        x += w * THING_S + rand(0.5, 1.6);
       }
       // punch puddles: steer into these to keep going
       const np = chance(0.35) ? 2 : 1;
@@ -7437,7 +7443,9 @@
         const fx = rand(L + 0.5, R - 0.5);
         if (fans.every((f) => Math.abs(f.x - fx) > DESK_W * 1.6)) fans.push({ x: fx, spin: rand(0, 6) });
       }
-      floors.push({ dept: DEPTS[k - 1], wall: WALLS[k - 1], things, beams, fans, holes: [] });
+      const gaps = Math.floor((TOWER_W - 0.9) / 1.1);
+      const posters = [randInt(0, gaps - 1), randInt(0, gaps - 1)].filter((g, i, a) => a.indexOf(g) === i).map((g) => ({ g, text: pick(POSTERS), c: pick(['#ffd84d', '#ff9a3d', '#7cc58f', '#ff6b8a']) }));
+      floors.push({ dept: DEPTS[k - 1], wall: WALLS[(k - 1) % WALLS.length], things, beams, fans, posters, holes: [] });
     }
     bldg = { fh, floors };
   }
@@ -7508,7 +7516,7 @@
     const dx = run.target - run.x;
     run.x = clamp(run.x + clamp(dx * 14, -22, 22) * dt, lo, hi);
     run.ang += (clamp(dx * 0.1, -0.25, 0.25) - run.ang) * Math.min(1, dt * 6);
-    run.vy += 5 * dt;
+    run.vy = Math.max(run.vy, -26) + 3.5 * dt;
     run.y += run.vy * dt;
     const ca = Math.cos(run.ang), sa = Math.sin(run.ang);
     for (const c of run.carried) {
@@ -7531,7 +7539,7 @@
       f.holes.push([x0, x1]);
       for (let i = 0; i < 10; i++) smoke.push({ x: run.x + rand(-reach, reach), y: sy + 0.05, r: rand(0.06, 0.14), t: -rand(0, 0.2), life: rand(1, 2), vx: rand(-0.4, 0.4), shade: rand(150, 200) });
       for (let i = 0; i < 14; i++) confetti.push({ x: run.x + rand(-reach, reach), y: sy, vx: rand(-3, 3), vy: rand(-2, 2), a: rand(0, 6), spin: rand(-10, 10), c: pick(['#9a9590', '#bdb7ae', '#7d7872']), t: 0 });
-      run.vy *= 0.9;
+      run.vy *= 0.93;
       shake = Math.max(shake, 0.35);
       sfx.smash();
       addPoints(100 * run.slab, `floor ${run.slab}!`, run.x, sy - 0.1);
@@ -7556,10 +7564,10 @@
       for (const t of bldg.floors[k - 1].things) {
         if (t.hit) continue;
         const T = PUNCH_THINGS[t.kind];
-        if (t.x + T.w / 2 < x0 - grab || t.x - T.w / 2 > x1 + grab || fy < top || fy - T.h > run.y) continue;
+        if (t.x + T.w * THING_S / 2 < x0 - grab || t.x - T.w * THING_S / 2 > x1 + grab || fy < top || fy - T.h * THING_S > run.y) continue;
         t.hit = true;
         if (t.kind === 'puddle') {
-          run.vy -= has('party') ? 6 : 3.2;
+          run.vy -= has('party') ? 7 : 4;
           sfx.pour(0.4);
           for (let i = 0; i < 16; i++) drops.push(Object.assign({ x: t.x + rand(-0.15, 0.15), y: fy - 0.03, vx: rand(-2, 2), vy: rand(-4, -1), r: rand(0.01, 0.025) }, PUNCH_SPLASH));
         } else {
@@ -7569,7 +7577,7 @@
           sfx.thud(0.6, 0.6);
           if (t.kind === 'boss') shake = Math.max(shake, 0.8);
         }
-        addPoints(T.pts, T.say, t.x, fy - T.h);
+        addPoints(T.pts, T.say, t.x, fy - T.h * THING_S);
       }
     }
     if (run.vy >= 0) endRun(false, `stalled on floor ${Math.max(0, run.slab - 1)}`);
@@ -7594,7 +7602,7 @@
       rain.push({ kind: p.kind, c: p.c, x: run.x + p.ox, y: topY, vx: rand(-3, 3) + (roof ? 0 : p.ox), vy: roof ? rand(-10, -4) : rand(-2, 0), a: p.a, va: rand(-5, 5) });
     }
     if (roof) {
-      addPoints(3000 + run.pile.length * 200, 'THROUGH THE ROOF!', run.x, slabY(FLOORS + 1));
+      addPoints(5000 + run.pile.length * 200, 'THROUGH THE ROOF!', run.x, slabY(FLOORS + 1));
       sfx.fanfare();
       for (let i = 0; i < 60; i++) confetti.push({ x: run.x + rand(-1, 1), y: slabY(FLOORS + 1), vx: rand(-4, 4), vy: rand(-7, -2), a: rand(0, 6), spin: rand(-10, 10), c: pick(['#e0304a', '#ffd84d', '#5dc9ff', '#ffffff']), t: 0 });
       shake = 1;
@@ -7896,7 +7904,21 @@
       ctx.fillStyle = 'rgba(42,39,51,0.25)';
       ctx.fillText(`${k}F ${f.dept}`, 0, 0);
       ctx.restore();
-      for (const t of f.things) if (!t.hit) drawThing(t.kind, t.x, fy, t.c);
+      for (const pz of f.posters) drawPoster(L + 0.9 + pz.g * 1.1 + 0.25, fy - fh * 0.62, pz);
+      for (const t of f.things) {
+        if (t.hit) continue;
+        const T = PUNCH_THINGS[t.kind];
+        // good to hit: a green glow
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ellipse(t.x, fy - T.h * THING_S * 0.5, T.w * THING_S * 0.5 + 0.18, T.h * THING_S * 0.5 + 0.14, `rgba(110,215,120,${0.45 + 0.12 * Math.sin(clock * 4 + t.x)})`, false);
+        ctx.restore();
+        ctx.save();
+        ctx.translate(t.x, fy);
+        ctx.scale(THING_S, THING_S);
+        drawThing(t.kind, 0, 0, t.c);
+        ctx.restore();
+      }
       for (const fan of f.fans) drawFan(fan, slabY(k + 1) + SLAB);
       // the slab this floor stands on, with holes where the desk came through
       drawSlab(fy, f.holes, k > 1 ? bldg.floors[k - 2].beams : []);
@@ -7908,6 +7930,83 @@
     rrect(R, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, '#8a6a5a', false);
   }
 
+  function drawPoster(x, y, pz) {
+    rrect(x - 0.24, y - 0.17, 0.48, 0.34, 0.02, '#fbfaf5');
+    rrect(x - 0.21, y - 0.14, 0.42, 0.2, 0.01, pz.c, false);
+    ellipse(x - 0.1, y - 0.04, 0.05, 0.05, 'rgba(255,255,255,0.6)', false);
+    ellipse(x + 0.08, y - 0.06, 0.035, 0.035, 'rgba(255,255,255,0.45)', false);
+    ctx.save();
+    ctx.translate(x, y + 0.12);
+    ctx.scale(0.001, 0.001);
+    ctx.font = '900 44px ui-rounded, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = INK;
+    ctx.fillText(pz.text, 0, 0, 400);
+    ctx.restore();
+  }
+
+  // Coworkers at Punch Tower are vegetables, and they panic.
+  function drawVeg(v, x, fy) {
+    const panic = Math.sin(clock * 9 + x * 4) > 0;
+    // legs and waving arms
+    line(x - 0.04, fy - 0.2, x - 0.06, fy, INK, 0.03);
+    line(x + 0.04, fy - 0.2, x + 0.06, fy, INK, 0.03);
+    ellipse(x - 0.07, fy - 0.01, 0.035, 0.015, INK, false);
+    ellipse(x + 0.07, fy - 0.01, 0.035, 0.015, INK, false);
+    line(x - 0.09, fy - 0.38, x - 0.18, panic ? fy - 0.54 : fy - 0.3, INK, 0.022);
+    line(x + 0.09, fy - 0.38, x + 0.18, panic ? fy - 0.3 : fy - 0.54, INK, 0.022);
+    let ey = fy - 0.4;
+    switch (v) {
+      case 'carrot':
+        for (const a of [-0.5, 0, 0.5]) { ctx.save(); ctx.translate(x, fy - 0.6); ctx.rotate(a); ellipse(0, -0.06, 0.025, 0.07, '#5ab88a'); ctx.restore(); }
+        poly([[x - 0.11, fy - 0.6], [x + 0.11, fy - 0.6], [x + 0.02, fy - 0.17], [x - 0.02, fy - 0.17]], '#f08a2b');
+        line(x - 0.06, fy - 0.3, x - 0.02, fy - 0.3, '#c96a1b', 0.012);
+        line(x + 0.03, fy - 0.24, x + 0.06, fy - 0.24, '#c96a1b', 0.012);
+        ey = fy - 0.48;
+        break;
+      case 'broccoli':
+        rrect(x - 0.06, fy - 0.4, 0.12, 0.22, 0.03, '#9fd18a');
+        for (const [bx, by, r] of [[-0.09, -0.48, 0.08], [0.09, -0.48, 0.08], [0, -0.56, 0.09], [-0.04, -0.44, 0.07], [0.05, -0.43, 0.07]]) ellipse(x + bx, fy + by, r, r, '#3f9a5a');
+        ey = fy - 0.32;
+        break;
+      case 'eggplant':
+        ctx.beginPath();
+        ctx.ellipse(x, fy - 0.36, 0.11, 0.19, 0.12, 0, Math.PI * 2);
+        finish('#6b3f8f');
+        poly([[x - 0.07, fy - 0.53], [x + 0.08, fy - 0.53], [x + 0.02, fy - 0.6], [x, fy - 0.66], [x - 0.02, fy - 0.6]], '#5ab88a');
+        ey = fy - 0.42;
+        break;
+      case 'tomato':
+        ellipse(x, fy - 0.34, 0.15, 0.14, '#e0403a');
+        poly([[x - 0.07, fy - 0.47], [x, fy - 0.44], [x + 0.07, fy - 0.47], [x + 0.02, fy - 0.5], [x, fy - 0.56], [x - 0.02, fy - 0.5]], '#3f9a5a');
+        ellipse(x - 0.06, fy - 0.4, 0.03, 0.02, 'rgba(255,255,255,0.45)', false);
+        ey = fy - 0.36;
+        break;
+      case 'corn':
+        rrect(x - 0.09, fy - 0.62, 0.18, 0.44, 0.08, '#f5d04a');
+        for (let r = 0; r < 6; r++) for (let q = 0; q < 3; q++) ellipse(x - 0.05 + q * 0.05, fy - 0.57 + r * 0.06, 0.018, 0.02, '#e8b92c', false);
+        poly([[x - 0.12, fy - 0.18], [x - 0.1, fy - 0.5], [x - 0.04, fy - 0.2]], '#7cc58f');
+        poly([[x + 0.12, fy - 0.18], [x + 0.1, fy - 0.5], [x + 0.04, fy - 0.2]], '#7cc58f');
+        ey = fy - 0.42;
+        break;
+      default: // mushroom
+        rrect(x - 0.06, fy - 0.38, 0.12, 0.2, 0.03, '#f4efe4');
+        ctx.beginPath();
+        ctx.ellipse(x, fy - 0.38, 0.17, 0.15, 0, Math.PI, 0);
+        ctx.closePath();
+        finish('#c8323f');
+        for (const [dx, dy] of [[-0.08, -0.43], [0.05, -0.47], [0.1, -0.41], [-0.02, -0.5]]) ellipse(x + dx, fy + dy, 0.022, 0.018, '#fbfaf5', false);
+        ey = fy - 0.29;
+    }
+    // a panicked face and a little tie
+    ellipse(x - 0.035, ey, 0.022, 0.026, '#ffffff');
+    ellipse(x + 0.035, ey, 0.022, 0.026, '#ffffff');
+    ellipse(x - 0.03, ey + 0.004, 0.01, 0.012, INK, false);
+    ellipse(x + 0.04, ey + 0.004, 0.01, 0.012, INK, false);
+    ellipse(x, ey + 0.055, 0.016, panic ? 0.022 : 0.012, '#7a1020');
+    poly([[x - 0.015, ey + 0.09], [x + 0.015, ey + 0.09], [x + 0.02, ey + 0.16], [x, ey + 0.18], [x - 0.02, ey + 0.16]], '#2f5fb3', false);
+  }
+
   // A ceiling fan hanging under a slab; once hit it dangles, bent.
   function drawFan(fan, ceil) {
     const y = ceil + 0.32;
@@ -7917,16 +8016,21 @@
       line(fan.x + 0.12, y + 0.05, fan.x + 0.3, y + 0.25, '#8a6a5a', 0.03);
       return;
     }
+    // bad to hit: a red glow
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ellipse(fan.x, y, 0.5, 0.2, `rgba(240,90,90,${0.5 + 0.15 * Math.sin(clock * 6 + fan.x)})`, false);
+    ctx.restore();
     line(fan.x, ceil, fan.x, y, INK, 0.02);
     const a = fan.spin + clock * 14;
     for (let i = 0; i < 4; i++) {
       const c = Math.cos(a + i * Math.PI / 2);
       ctx.beginPath();
-      ctx.ellipse(fan.x + c * 0.15, y + 0.01, Math.abs(c) * 0.15 + 0.01, 0.022, 0, 0, Math.PI * 2);
-      finish('#8a6a5a');
+      ctx.ellipse(fan.x + c * 0.3, y + 0.01, Math.abs(c) * 0.3 + 0.015, 0.035, 0, 0, Math.PI * 2);
+      finish('#d23a3a');
     }
-    ellipse(fan.x, y, 0.06, 0.04, '#5b6170');
-    ellipse(fan.x, y + 0.05, 0.035, 0.025, '#ffe9a8');
+    ellipse(fan.x, y, 0.08, 0.05, '#5b6170');
+    ellipse(fan.x, y + 0.06, 0.045, 0.03, '#ffe9a8');
   }
 
   function drawSlab(y, holes, beams) {
@@ -7943,8 +8047,13 @@
     }
     for (const bm of beams) {
       if (bm.broken) continue;
-      rrect(bm[0], y - 0.02, bm[1] - bm[0], SLAB + 0.04, 0.01, '#c4512a');
-      for (let rx = bm[0] + 0.05; rx < bm[1] - 0.02; rx += 0.08) ellipse(rx, y + SLAB / 2, 0.01, 0.01, '#7a2a12', false);
+      // bad to hit: bright red with a red glow under it
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      rrect(bm[0] - 0.1, y - 0.05, bm[1] - bm[0] + 0.2, SLAB + 0.35, 0.08, `rgba(240,90,90,${0.45 + 0.15 * Math.sin(clock * 6 + bm[0])})`, false);
+      ctx.restore();
+      rrect(bm[0], y - 0.03, bm[1] - bm[0], SLAB + 0.06, 0.01, '#d92b2b');
+      for (let rx = bm[0] + 0.06; rx < bm[1] - 0.03; rx += 0.1) ellipse(rx, y + SLAB / 2, 0.014, 0.014, '#7a1212', false);
     }
   }
 
@@ -7961,7 +8070,8 @@
         rrect(x - 0.07, fy - 0.3, 0.14, 0.3, 0.01, '#f4f4f6');
         ctx.beginPath();
         ctx.ellipse(x, fy - 0.42, 0.075, 0.11, 0, 0, Math.PI * 2);
-        finish('rgba(120,190,240,0.75)');
+        finish('rgba(255,150,60,0.8)');
+        ellipse(x - 0.025, fy - 0.46, 0.015, 0.03, 'rgba(255,255,255,0.5)', false);
         break;
       case 'copier':
         rrect(x - 0.18, fy - 0.36, 0.36, 0.36, 0.02, '#c9ccd3');
@@ -7972,20 +8082,11 @@
       case 'plant':
         rrect(x - 0.07, fy - 0.16, 0.14, 0.16, 0.02, '#c96f4a');
         for (const [lx, ly] of [[-0.07, -0.4], [0.06, -0.44], [0, -0.48], [-0.1, -0.3], [0.1, -0.32]]) ellipse(x + lx, fy + ly, 0.05, 0.09, '#5ab88a');
+        for (const [lx, ly] of [[-0.05, -0.34], [0.07, -0.38], [0, -0.44]]) ellipse(x + lx, fy + ly, 0.025, 0.02, '#ffd84d');
         break;
-      case 'worker': {
-        line(x - 0.04, fy - 0.3, x - 0.05, fy, INK, 0.035);
-        line(x + 0.04, fy - 0.3, x + 0.05, fy, INK, 0.035);
-        rrect(x - 0.08, fy - 0.52, 0.16, 0.24, 0.04, c || '#6b8fe6');
-        line(x, fy - 0.5, x, fy - 0.36, '#e04a55', 0.02);
-        ellipse(x, fy - 0.58, 0.065, 0.07, '#e3b48f');
-        const panic = Math.sin(clock * 9 + x * 4) > 0;
-        line(x - 0.08, fy - 0.48, x - 0.16, panic ? fy - 0.62 : fy - 0.36, INK, 0.025);
-        line(x + 0.08, fy - 0.48, x + 0.16, panic ? fy - 0.36 : fy - 0.62, INK, 0.025);
-        ellipse(x - 0.02, fy - 0.59, 0.01, 0.012, INK, false);
-        ellipse(x + 0.025, fy - 0.59, 0.01, 0.012, INK, false);
+      case 'worker':
+        drawVeg(c, x, fy);
         break;
-      }
       case 'vending':
         rrect(x - 0.16, fy - 0.72, 0.32, 0.72, 0.02, '#c8323f');
         rrect(x - 0.12, fy - 0.66, 0.17, 0.44, 0.01, '#bfe3f5', false);
@@ -8004,16 +8105,22 @@
       case 'boss':
         rrect(x - 0.31, fy - 0.36, 0.62, 0.06, 0.01, '#6b3f22');
         rrect(x - 0.29, fy - 0.3, 0.58, 0.3, 0.01, '#5a3a24');
-        rrect(x - 0.1, fy - 0.66, 0.2, 0.3, 0.05, '#1d1c22');
-        ellipse(x, fy - 0.6, 0.06, 0.065, '#e3b48f');
-        rrect(x - 0.06, fy - 0.67, 0.12, 0.03, 0.01, '#9aa0aa', false);
-        line(x, fy - 0.53, x, fy - 0.42, '#e04a55', 0.02);
+        // the big boss: a pineapple in a suit, in sunglasses
+        rrect(x - 0.12, fy - 0.56, 0.24, 0.22, 0.05, '#1d1c22');
+        line(x, fy - 0.55, x, fy - 0.42, '#e04a55', 0.025);
+        for (const a of [-0.6, -0.3, 0, 0.3, 0.6]) { ctx.save(); ctx.translate(x, fy - 0.84); ctx.rotate(a); poly([[-0.025, 0], [0.025, 0], [0, -0.14]], '#3f9a5a'); ctx.restore(); }
+        ellipse(x, fy - 0.68, 0.11, 0.15, '#e8b92c');
+        ctx.strokeStyle = '#b8862a';
+        ctx.lineWidth = 0.01;
+        for (let d = -0.12; d <= 0.12; d += 0.06) { line(x - 0.1, fy - 0.68 + d - 0.06, x + 0.1, fy - 0.68 + d + 0.06, '#b8862a', 0.01); line(x - 0.1, fy - 0.68 + d + 0.06, x + 0.1, fy - 0.68 + d - 0.06, '#b8862a', 0.01); }
+        rrect(x - 0.09, fy - 0.73, 0.18, 0.05, 0.02, '#1d1c22', false);
+        line(x - 0.05, fy - 0.6, x + 0.05, fy - 0.6, INK, 0.012);
         break;
       case 'puddle':
         // a big glowing bowl of punch: steer into it for a boost
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ellipse(x, fy - 0.2, 0.45, 0.35, `rgba(255,90,110,${0.18 + 0.1 * Math.sin(clock * 5 + x)})`, false);
+        ellipse(x, fy - 0.2, 0.45, 0.35, `rgba(90,230,120,${0.25 + 0.12 * Math.sin(clock * 5 + x)})`, false);
         ctx.restore();
         rrect(x - 0.08, fy - 0.08, 0.16, 0.08, 0.02, '#c9c2b6');
         ctx.beginPath();
@@ -8399,6 +8506,15 @@
     flip: (s = 1.2) => flip(s, 1, 0),
     get state() { return state; },
     run: () => run && { why: run.why, pile: run.pile.length, x: run.x, slab: run.slab, vy: run.vy, over: run.over },
+    bowl: () => {
+      // the screen x of the next punch bowl above the desk, for testing
+      if (!run || run.over || !bldg) return null;
+      for (let k = Math.max(1, run.slab - 1); k <= FLOORS; k++) {
+        const t = bldg.floors[k - 1].things.find((q) => q.kind === 'puddle' && !q.hit);
+        if (t && slabY(k) < run.y) return W / 2 + (t.x - cx) * ppm * zoom;
+      }
+      return null;
+    },
     bell: () => { if (!bellOn) return null; const c = bellSpot(); return { x: W / 2 + (c.x - cx) * ppm * zoom, y: floorY * ppm - (floorY - c.y - lift) * ppm * zoom }; },
     get score() { return score; },
     get hang() { return hang; },
