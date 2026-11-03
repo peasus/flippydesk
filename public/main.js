@@ -2947,7 +2947,7 @@
   function updateBoss(dt) {
     boss.t += dt;
     if (boss.mode === 'away' && state === 'ready' && idleT > BOSS_IDLE) {
-      Object.assign(boss, { mode: 'in', t: 0, line: pick(bossLines()), said: false, talkT: 0, look: pick(robotWorld ? ROBOT_BOSS_LOOKS : mouseWorld ? MOUSE_BOSS_LOOKS : BOSS_LOOKS) });
+      Object.assign(boss, { mode: 'in', t: 0, line: pick(bossLines()), said: false, talkT: 0, look: pick(punchWorld ? PUNCH_BOSS_LOOKS : robotWorld ? ROBOT_BOSS_LOOKS : mouseWorld ? MOUSE_BOSS_LOOKS : BOSS_LOOKS) });
     }
     if (boss.mode === 'in') {
       const was = boss.slide;
@@ -2970,7 +2970,30 @@
     if (boss.mode === 'in' && state !== 'ready') bossFlee();
   }
 
-  const bossLines = () => (robotWorld ? ROBOT_BOSS_LINES : mouseWorld ? MOUSE_BOSS_LINES : BOSS_LINES);
+  const bossLines = () => (punchWorld ? PUNCH_BOSS_LINES : robotWorld ? ROBOT_BOSS_LINES : mouseWorld ? MOUSE_BOSS_LINES : BOSS_LINES);
+  const PUNCH_BOSS_LINES = [
+    'Quick sync about the pulp report?',
+    'We need to squeeze a lot more out of Q3.',
+    'Let\u2019s circle back once you\u2019ve concentrated.',
+    'Per my last memo... the juice memo.',
+    'Gonna need you in Saturday. It\u2019s harvest season.',
+    'Can you make the logo more zesty?',
+    'Who keeps leaving peels in the break room?',
+    'Big win, team! Anyway, we\u2019re going from concentrate.',
+    'This quarter is all about fresh-squeezed synergy.',
+    'Your performance review is ripe. Very ripe.',
+    'Let\u2019s take this offline. Into the blender.',
+    'Mandatory smoothie social at 4. Bring a banana.',
+    'Please stop calling the boardroom the fruit bowl.',
+    'We\u2019re pivoting to kale. Update the roadmap.',
+    'Did Punch Pitcher approve this? He approves everything.',
+  ];
+  const PUNCH_BOSS_LOOKS = [
+    { pitch: 0.9, shirt: '#1d1c22', legs: '#1d1c22', accent: '#e04a55', skin: '#e8b92c', she: false, veg: 'pineapple', shades: true },
+    { pitch: 1.6, shirt: '#3d4a6b', legs: '#3d4a6b', accent: '#f2c14e', skin: '#6b3f8f', she: true, veg: 'eggplant' },
+    { pitch: 1.3, shirt: '#5a7d3a', legs: '#2f2c38', accent: '#e8e2d6', skin: '#3f9a5a', she: false, veg: 'broccoli' },
+    { pitch: 1.8, shirt: '#8a3d55', legs: '#2f2c38', accent: '#ffd84d', skin: '#ffd84d', she: true, veg: 'lemon' },
+  ];
 
   function bossFlee() {
     if (boss.mode !== 'in') return;
@@ -3001,7 +3024,24 @@
   const pal = { mode: 'away', slide: 0, due: Infinity, line: '', talkT: 0, look: PAL_LOOKS[0] };
 
   // Called for each new desk: rarely, the coworker is coming.
-  const palLines = () => (robotWorld ? ROBOT_PAL_LINES : mouseWorld ? MOUSE_PAL_LINES : PAL_LINES);
+  const palLines = () => (punchWorld ? PUNCH_PAL_LINES : robotWorld ? ROBOT_PAL_LINES : mouseWorld ? MOUSE_PAL_LINES : PAL_LINES);
+  const PUNCH_PAL_LINES = [
+    'Okay so I\u2019m juicing now. Everything. Even soup.',
+    'Wanna see 400 photos of my smoothies?',
+    'Is this your smoothie? It\u2019s mine now.',
+    'I\u2019m starting a podcast. It\u2019s about pulp.',
+    'My cousin got diced. Very sad. Very tasty.',
+    'Have you tried standing meetings? In the crisper?',
+    'Heard Accounting is going organic.',
+    'Did you see Punch Pitcher? He waved at me. With a glove.',
+  ];
+  const PUNCH_PAL_LOOKS = [
+    { hair: '#3f9a5a', hoodie: '#7cc58f', skin: '#f08a2b', pants: '#4a4f5c', veg: 'carrot' },
+    { hair: '#3f9a5a', hoodie: '#b48be0', skin: '#e0403a', pants: '#3d4a6b', veg: 'tomato' },
+    { hair: '#7cc58f', hoodie: '#f08a4b', skin: '#f5d04a', pants: '#2f2c38', veg: 'corn' },
+    { hair: '#c8323f', hoodie: '#6b8fe6', skin: '#f4efe4', pants: '#2f2c38', veg: 'mushroom' },
+    { hair: '#3f9a5a', hoodie: '#ffd84d', skin: '#e0304a', pants: '#4a4f5c', veg: 'strawberry' },
+  ];
 
   function schedulePal() {
     pal.due = chance(0.12) ? rand(1.5, 3) : Infinity;
@@ -3010,7 +3050,7 @@
   function updatePal(dt) {
     if (pal.mode === 'away' && state === 'ready' && idleT > pal.due) {
       pal.due = Infinity;
-      Object.assign(pal, { mode: 'in', line: pick(palLines()), talkT: -0.4, said: false, look: pick(robotWorld ? ROBOT_PAL_LOOKS : mouseWorld ? MOUSE_PAL_LOOKS : PAL_LOOKS) });
+      Object.assign(pal, { mode: 'in', line: pick(palLines()), talkT: -0.4, said: false, look: pick(punchWorld ? PUNCH_PAL_LOOKS : robotWorld ? ROBOT_PAL_LOOKS : mouseWorld ? MOUSE_PAL_LOOKS : PAL_LOOKS) });
     }
     if (pal.mode === 'in') {
       pal.slide = Math.min(1, pal.slide + dt * 1.6);
@@ -3047,7 +3087,7 @@
     ctx.translate(x, floorY + bob);
     if (mouseWorld) drawTail(-1, Math.sin(clock * 4) * 0.05);
     // hair hangs down the back, behind everything
-    rrect(-0.17, -1.62, 0.22, 0.5, 0.09, L.hair);
+    if (!L.veg) rrect(-0.17, -1.62, 0.22, 0.5, 0.09, L.hair);
     // legs and sneakers
     rrect(-0.12, -0.78, 0.11, 0.76, 0.02, L.pants);
     rrect(0.02, -0.78, 0.11, 0.76, 0.02, L.pants);
@@ -3064,6 +3104,11 @@
     rrect(0.36, -1.2, 0.08, 0.15, 0.015, '#1d1c22');
     rrect(0.37, -1.19, 0.06, 0.12, 0.008, pal.talkT % 0.8 < 0.4 ? '#f2c14e' : '#6b8fe6', false);
     ellipse(0.39, -1.05, 0.03, 0.025, L.skin);
+    if (L.veg) {
+      drawProduceHead(0.02, -1.5, L.veg, { open: pal.mode === 'in' && Math.sin(clock * 14) > 0 });
+      ctx.restore();
+      return;
+    }
     if (mouseWorld || robotWorld) {
       if (robotWorld) drawRobotHead(0.02, -1.5, L.skin, { open: pal.mode === 'in' && Math.sin(clock * 14) > 0 });
       else drawMouseHead(0.02, -1.5, L.skin, { open: pal.mode === 'in' && Math.sin(clock * 14) > 0 });
@@ -3137,7 +3182,7 @@
     if (gust.mode === 'away' && state === 'ready' && idleT > gust.due) {
       gust.due = Infinity;
       gust.dir = chance(0.5) ? 1 : -1;
-      Object.assign(gust, { mode: 'walk', t: 0, x: gust.dir > 0 ? -0.4 : Wm + 0.4, look: pick(robotWorld ? ROBOT_PAL_LOOKS : mouseWorld ? MOUSE_PAL_LOOKS : PAL_LOOKS), tooted: false });
+      Object.assign(gust, { mode: 'walk', t: 0, x: gust.dir > 0 ? -0.4 : Wm + 0.4, look: pick(punchWorld ? PUNCH_PAL_LOOKS : robotWorld ? ROBOT_PAL_LOOKS : mouseWorld ? MOUSE_PAL_LOOKS : PAL_LOOKS), tooted: false });
     }
     if (gust.mode !== 'walk') return;
     gust.t += dt;
@@ -3169,7 +3214,8 @@
     rrect(-0.17, -1.34, 0.34, 0.62, 0.09, L.hoodie);
     line(0, -1.25, -step * 0.12, -0.85, INK, 0.1);
     line(0, -1.25, -step * 0.12, -0.85, L.hoodie, 0.07);
-    if (robotWorld) drawRobotHead(0.01, -1.48, L.skin);
+    if (L.veg) drawProduceHead(0.01, -1.48, L.veg, { open: true });
+    else if (robotWorld) drawRobotHead(0.01, -1.48, L.skin);
     else if (mouseWorld) drawMouseHead(0.01, -1.48, L.skin, { twitch: true });
     else {
     ellipse(0.01, -1.48, 0.12, 0.14, L.skin);
@@ -3246,6 +3292,11 @@
     ctx.fillText(L.she ? 'CEO' : '#1', -0.45, -1.03);
     ctx.restore();
     // head
+    if (punchWorld && L.veg) {
+      drawProduceHead(0, -1.5, L.veg, { open: boss.mode === 'flee' || (boss.mode === 'in' && Math.sin(clock * 12) > 0), shades: L.shades });
+      ctx.restore();
+      return;
+    }
     if (robotWorld) {
       drawRobotHead(0, -1.5, L.skin, { oneEye: L.oneEye, wide: boss.mode === 'flee', open: boss.mode === 'in' && Math.sin(clock * 12) > 0 });
       ctx.restore();
@@ -4422,6 +4473,17 @@
     vending: { name: 'Vending machine', pts: 400, say: 'free snacks!', w: 0.32, h: 0.72 },
     trophy: { name: 'Bowling trophy', pts: 350, say: 'strike!', w: 0.14, h: 0.3 },
     boss: { name: 'The big boss', pts: 1500, say: 'CORNER OFFICE!', w: 0.62, h: 0.66 },
+    blender: { name: 'Giant blender', pts: 300, say: 'whirrr!', w: 0.2, h: 0.5 },
+    arcade: { name: 'Arcade cabinet', pts: 350, say: 'game over!', w: 0.26, h: 0.66 },
+    stall: { name: 'Market stall', pts: 300, say: 'fresh produce!', w: 0.6, h: 0.6 },
+    crate: { name: 'Produce crate', pts: 150, say: 'crate escape!', w: 0.32, h: 0.26 },
+    cart: { name: 'Shopping cart', pts: 200, say: 'cleanup on aisle 9!', w: 0.36, h: 0.36 },
+    balloons: { name: 'Balloons', pts: 150, say: 'pop pop pop!', w: 0.26, h: 0.8 },
+    bed: { name: 'Hotel bed', pts: 250, say: 'room service!', w: 0.62, h: 0.32 },
+    luggage: { name: 'Luggage cart', pts: 250, say: 'bellhop!', w: 0.34, h: 0.56 },
+    cloche: { name: 'Room service', pts: 200, say: 'bon appétit!', w: 0.3, h: 0.36 },
+    treadmill: { name: 'Treadmill', pts: 250, say: 'cardio!', w: 0.5, h: 0.46 },
+    weights: { name: 'Dumbbell rack', pts: 250, say: 'gains!', w: 0.44, h: 0.36 },
     puddle: { name: '', pts: 0, say: 'PUNCH BOWL! boost!', w: 0.6, h: 0.45 },
   };
   const PUNCH_ITEM_NAMES = Object.values(PUNCH_THINGS).map((t) => t.name).filter(Boolean);
@@ -7385,12 +7447,44 @@
   let rain = [];          // the haul, coming back down
   let pitchScene = null;  // the crash-through-the-wall cutscene in the robot world
   const pitcher = { throwT: 9 };
-  const DEPTS = ['MAILROOM', 'ACCOUNTING', 'HR', 'PULP DIVISION', 'LEGAL', 'IT', 'MARKETING', 'SQUEEZE LAB', 'SALES', 'PAYROLL',
-    'R&D', 'CONCENTRATE', 'COMPLIANCE', 'SEED FUND', 'BRANDING', 'ZEST OPS', 'STRATEGY', 'BOARD ROOM', 'VP FLOOR', 'EXECUTIVE'];
-  const POSTERS = ['SQUEEZE THE DAY', 'PULP FRICTION', 'JUICE IT UP', 'STAY FRESH', 'ZEST IN SHOW', 'NO PULP NO GLORY', 'BE THE BLEND', 'CONCENTRATE!', 'FRESH IDEAS', 'THINK OUTSIDE THE CARTON'];
-  const VEGGIES = ['carrot', 'broccoli', 'eggplant', 'tomato', 'corn', 'mushroom'];
+  // Each round picks one of Punch Pitcher's buildings to fly up through.
+  const BUILDINGS = [
+    {
+      name: 'PUNCH TOWER', sub: 'Home of the Uppercut · Est. 1987', outside: '#8a6a5a',
+      depts: ['MAILROOM', 'ACCOUNTING', 'HR', 'PULP DIVISION', 'LEGAL', 'IT', 'MARKETING', 'SQUEEZE LAB', 'SALES', 'PAYROLL',
+        'R&D', 'CONCENTRATE', 'COMPLIANCE', 'SEED FUND', 'BRANDING', 'ZEST OPS', 'STRATEGY', 'BOARD ROOM', 'VP FLOOR', 'EXECUTIVE'],
+      walls: ['#f3e9d8', '#e3eef5', '#efe3f0', '#e6f0e1', '#f5e6dc', '#e9e7f3', '#f1efdc', '#dfeceb', '#f2e1e1', '#e8e2d6'],
+      pool: ['desk', 'desk', 'cooler', 'copier', 'plant', 'worker', 'worker', 'vending', 'trophy', 'blender', 'arcade'],
+      posters: ['SQUEEZE THE DAY', 'PULP FRICTION', 'JUICE IT UP', 'STAY FRESH', 'ZEST IN SHOW', 'NO PULP NO GLORY', 'BE THE BLEND', 'CONCENTRATE!', 'FRESH IDEAS', 'THINK OUTSIDE THE CARTON'],
+    },
+    {
+      name: 'FARMERS MARKET MALL', sub: 'Twenty floors of fresh · Open late', outside: '#5a7d3a',
+      depts: ['PARKING', 'FOOD COURT', 'PRODUCE', 'BAKERY', 'DAIRY AISLE', 'FLORIST', 'SPICE BAZAAR', 'FRUIT STANDS', 'JUICE BAR', 'ARCADE',
+        'CINEMA', 'TOY STORE', 'PET SHOP', 'SHOE STORE', 'SALAD BAR', 'SMOOTHIE CO', 'ROOF GARDEN', 'GREENHOUSE', 'BEEHIVES', 'SKY BAR'],
+      walls: ['#fdf1d6', '#e6f4e1', '#fbe3e0', '#e3f0f7', '#fff3c4', '#f0e6fb', '#e1f5ee', '#fde6cf'],
+      pool: ['stall', 'stall', 'crate', 'crate', 'cart', 'worker', 'worker', 'balloons', 'plant', 'arcade', 'blender'],
+      posters: ['BUY ONE GET ONE', 'FRESH TODAY', 'LOCAL & JUICY', 'SALE ON KALE', 'FREE SAMPLES', 'ORGANIC-ISH', 'PEAR-FECT DEALS', 'LETTUCE PRAY'],
+    },
+    {
+      name: 'THE GRAND BLENDER', sub: 'A hotel of distinction · Since 1922', outside: '#6b4a7a',
+      depts: ['LOBBY BAR', 'BALLROOM', 'CASINO', 'POOL DECK', 'SPA', 'ROOM 701', 'ROOM 802', 'ROOM 903', 'LAUNDRY', 'KITCHEN',
+        'ROOM 1204', 'ROOM 1307', 'ICE FLOOR', 'ROOM 1509', 'BUFFET', 'ROOM 1706', 'BRIDAL SUITE', 'PRESIDENTIAL', 'HELIPAD BAR', 'PENTHOUSE'],
+      walls: ['#f5e6dc', '#efe3f0', '#f2e1e1', '#e9e7f3', '#f1efdc', '#e4e9f5'],
+      pool: ['bed', 'bed', 'luggage', 'cloche', 'worker', 'worker', 'plant', 'balloons', 'vending', 'cooler'],
+      posters: ['DO NOT DISTURB', 'CHECKOUT 11AM', 'ROOM SERVICE', 'NO DIVING', 'ASK ABOUT BRUNCH', 'VALET THIS WAY', 'GUESTS ONLY'],
+    },
+    {
+      name: 'PULP FITNESS', sub: 'No pain, no grain · 24/7', outside: '#3d5a7a',
+      depts: ['FRONT DESK', 'LOCKERS', 'CARDIO', 'FREE WEIGHTS', 'YOGA', 'SPIN CLASS', 'BOXING', 'SAUNA', 'POOL', 'SMOOTHIE BAR',
+        'CROSS TRAIN', 'PILATES', 'STRETCH ZONE', 'CLIMB WALL', 'DANCE STUDIO', 'TRACK', 'LEG DAY', 'ARM DAY', 'CORE DAY', 'CHAMPIONS'],
+      walls: ['#e3eef5', '#e6f0e1', '#f5e6dc', '#e9e7f3', '#dfeceb', '#f2e1e1'],
+      pool: ['treadmill', 'treadmill', 'weights', 'worker', 'worker', 'cooler', 'blender', 'trophy', 'plant'],
+      posters: ['NO PAIN NO GRAIN', 'SQUAT GOALS', 'BEET YOUR BEST', 'LEG DAY', 'HYDRATE', 'FEEL THE BURN', 'ONE MORE REP', 'YOU CAN DO IT'],
+    },
+  ];
+  let building = BUILDINGS[0];
+  const VEGGIES = ['carrot', 'broccoli', 'eggplant', 'tomato', 'corn', 'mushroom', 'lemon', 'strawberry', 'pepper', 'banana'];
   const THING_S = 1.6;   // things in the tower are drawn and hit at this scale
-  const WALLS = ['#f3e9d8', '#e3eef5', '#efe3f0', '#e6f0e1', '#f5e6dc', '#e9e7f3', '#f1efdc', '#dfeceb', '#f2e1e1', '#e8e2d6'];
 
   const robotArmoryDone = () => TRY_ALL || ROBOT_ARMS.every((w) => owned.includes(w.id));
   const slabY = (k) => floorY - k * bldg.fh;   // top of floor k's slab
@@ -7400,20 +7494,22 @@
   const TOWER_W = 9;
   const towerL = () => cx - TOWER_W / 2;
   const towerR = () => cx + TOWER_W / 2;
-  const reachOf = () => DESK_W / 2 + (run ? Math.min(0.9, run.pile.length * 0.03) : 0);
+  const reachOf = () => DESK_W / 2;
+  const TAIL_GAP = 0.55;   // meters between links of the tail
 
   function buildTower() {
     bldg = null;
     run = null;
     rain = [];
     if (!punchWorld) return;
+    building = pick(BUILDINGS);
     const fh = Math.max(2.2, floorY + 0.25);
     const L = towerL(), R = towerR();
     const floors = [];
     for (let k = 1; k <= FLOORS; k++) {
       const things = [];
       const top = k === FLOORS;
-      const pool = ['desk', 'desk', 'cooler', 'copier', 'plant', 'worker', 'worker', 'vending', 'trophy'];
+      const pool = building.pool;
       if (top) things.push({ kind: 'boss', x: rand(L + TOWER_W * 0.3, L + TOWER_W * 0.7) });
       let x = L + rand(0.25, 0.6);
       while (x < R - 0.3) {
@@ -7444,8 +7540,8 @@
         if (fans.every((f) => Math.abs(f.x - fx) > DESK_W * 1.6)) fans.push({ x: fx, spin: rand(0, 6) });
       }
       const gaps = Math.floor((TOWER_W - 0.9) / 1.1);
-      const posters = [randInt(0, gaps - 1), randInt(0, gaps - 1)].filter((g, i, a) => a.indexOf(g) === i).map((g) => ({ g, text: pick(POSTERS), c: pick(['#ffd84d', '#ff9a3d', '#7cc58f', '#ff6b8a']) }));
-      floors.push({ dept: DEPTS[k - 1], wall: WALLS[(k - 1) % WALLS.length], things, beams, fans, posters, holes: [] });
+      const posters = [randInt(0, gaps - 1), randInt(0, gaps - 1)].filter((g, i, a) => a.indexOf(g) === i).map((g) => ({ g, text: pick(building.posters), c: pick(['#ffd84d', '#ff9a3d', '#7cc58f', '#ff6b8a']) }));
+      floors.push({ dept: building.depts[k - 1], wall: building.walls[(k - 1) % building.walls.length], things, beams, fans, posters, holes: [] });
     }
     bldg = { fh, floors };
   }
@@ -7457,7 +7553,7 @@
     run = {
       x: p.x, y: p.y, ang: 0, target: p.x, t: 0,
       vy: -(9.5 + clamp(strength, 0.3, 2.6) * 2.6) * (has('sugar') ? 1.3 : 1),
-      slab: 1, pile: [], shield: has('ice'), carried: [], over: false,
+      slab: 1, pile: [], trail: [{ x: p.x, y: p.y }], shield: has('ice'), carried: [], over: false,
     };
     for (const b of bodies) {
       const q = b.getPosition();
@@ -7494,8 +7590,9 @@
     run.vy *= slow;
     sfx.clang();
     shake = Math.max(shake, 0.7);
-    const lost = run.pile.splice(0, Math.min(shed, run.pile.length));
-    for (const p of lost) rain.push({ kind: p.kind, c: p.c, x: run.x + p.ox, y, vx: rand(-4, 4), vy: rand(-3, 0), a: p.a, va: rand(-8, 8) });
+    const at = tailSpots();
+    const lost = run.pile.splice(Math.max(0, run.pile.length - shed), shed);
+    lost.forEach((p, i) => { const q = at[run.pile.length + i] || { x: run.x, y }; rain.push({ kind: p.kind, c: p.c, x: q.x, y: q.y, vx: rand(-4, 4), vy: rand(-3, 0), a: p.a, va: rand(-8, 8) }); });
     addPoints(0, lost.length ? `${label} lost ${lost.length}` : label, x, y - 0.1);
   }
 
@@ -7523,8 +7620,16 @@
       if (!bodies.includes(c.b)) continue;
       c.b.setTransform(V(run.x + c.dx * ca - c.dy * sa, run.y + c.dx * sa + c.dy * ca), c.a + run.ang);
     }
-    const pileH = Math.min(1.1, run.pile.length * 0.04);
-    const top = run.y - DESK_H - 0.4 - pileH;
+    // remember the path, so the tail can follow it
+    const last = run.trail[run.trail.length - 1];
+    if (Math.hypot(run.x - last.x, run.y - last.y) > 0.05) run.trail.push({ x: run.x, y: run.y });
+    const need = (run.pile.length + 2) * TAIL_GAP + 1;
+    let len = 0;
+    for (let i = run.trail.length - 1; i > 0; i--) {
+      len += Math.hypot(run.trail[i].x - run.trail[i - 1].x, run.trail[i].y - run.trail[i - 1].y);
+      if (len > need) { run.trail.splice(0, i - 1); break; }
+    }
+    const top = run.y - DESK_H - 0.4;
     const x0 = run.x - reach, x1 = run.x + reach;
     // crash up through each ceiling
     while (top < slabY(run.slab) + SLAB) {
@@ -7571,7 +7676,8 @@
           sfx.pour(0.4);
           for (let i = 0; i < 16; i++) drops.push(Object.assign({ x: t.x + rand(-0.15, 0.15), y: fy - 0.03, vx: rand(-2, 2), vy: rand(-4, -1), r: rand(0.01, 0.025) }, PUNCH_SPLASH));
         } else {
-          run.pile.push({ kind: t.kind, c: t.c, a: rand(-0.6, 0.6), ox: rand(-1, 1) });
+          run.pile.push({ kind: t.kind, c: t.c, a: rand(-0.4, 0.4), ox: 0, wig: rand(0, 6) });
+          if (run.pile.length % 10 === 0) addPoints(500 * run.pile.length / 10, `tail x${run.pile.length}!`, run.x, run.y + 0.5);
           run.vy *= t.kind === 'boss' ? 0.85 : 0.985;
           itemStat(T.name).flipped++;
           sfx.thud(0.6, 0.6);
@@ -7597,10 +7703,13 @@
       c.b.setLinearVelocity(roof ? V(rand(-3, 3), rand(-9, -4)) : V(rand(-0.5, 0.5), 0));
       c.b.setAngularVelocity(roof ? rand(-6, 6) : rand(-1, 1));
     }
-    const topY = run.y - DESK_H - 0.4;
-    for (const p of run.pile) {
-      rain.push({ kind: p.kind, c: p.c, x: run.x + p.ox, y: topY, vx: rand(-3, 3) + (roof ? 0 : p.ox), vy: roof ? rand(-10, -4) : rand(-2, 0), a: p.a, va: rand(-5, 5) });
-    }
+    // the tail comes apart link by link, a long cascade for a long tail
+    const at = tailSpots();
+    run.pile.forEach((p, i) => {
+      const q = at[i] || { x: run.x, y: run.y };
+      rain.push({ kind: p.kind, c: p.c, x: q.x, y: q.y, vx: rand(-3, 3), vy: roof ? rand(-10, -4) - i * 0.15 : rand(-3, 0) - i * 0.1, a: p.a, va: rand(-5, 5) });
+    });
+    if (run.pile.length >= 5) addPoints(run.pile.length * 100, `${run.pile.length}-long tail!`, run.x, run.y + 0.4);
     if (roof) {
       addPoints(5000 + run.pile.length * 200, 'THROUGH THE ROOF!', run.x, slabY(FLOORS + 1));
       sfx.fanfare();
@@ -7926,8 +8035,8 @@
     // the roof, then sky
     drawSlab(slabY(FLOORS + 1), run && run.over && run.slab > FLOORS ? [[run.x - DESK_W / 2, run.x + DESK_W / 2]] : [], bldg.floors[FLOORS - 1].beams);
     // the outside walls
-    rrect(L - 0.6, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, '#8a6a5a', false);
-    rrect(R, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, '#8a6a5a', false);
+    rrect(L - 0.6, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, building.outside, false);
+    rrect(R, slabY(FLOORS + 1), 0.6, floorY - slabY(FLOORS + 1), 0, building.outside, false);
   }
 
   function drawPoster(x, y, pz) {
@@ -7945,16 +8054,9 @@
     ctx.restore();
   }
 
-  // Coworkers at Punch Tower are vegetables, and they panic.
-  function drawVeg(v, x, fy) {
-    const panic = Math.sin(clock * 9 + x * 4) > 0;
-    // legs and waving arms
-    line(x - 0.04, fy - 0.2, x - 0.06, fy, INK, 0.03);
-    line(x + 0.04, fy - 0.2, x + 0.06, fy, INK, 0.03);
-    ellipse(x - 0.07, fy - 0.01, 0.035, 0.015, INK, false);
-    ellipse(x + 0.07, fy - 0.01, 0.035, 0.015, INK, false);
-    line(x - 0.09, fy - 0.38, x - 0.18, panic ? fy - 0.54 : fy - 0.3, INK, 0.022);
-    line(x + 0.09, fy - 0.38, x + 0.18, panic ? fy - 0.3 : fy - 0.54, INK, 0.022);
+  // Coworkers at Punch Tower are fruit and vegetables, and they panic.
+  const c2 = (v) => (v === 'pepper' ? '#5ab88a' : '#e0403a');
+  function drawVegBody(v, x, fy) {
     let ey = fy - 0.4;
     switch (v) {
       case 'carrot':
@@ -7989,6 +8091,45 @@
         poly([[x + 0.12, fy - 0.18], [x + 0.1, fy - 0.5], [x + 0.04, fy - 0.2]], '#7cc58f');
         ey = fy - 0.42;
         break;
+      case 'lemon':
+        ellipse(x, fy - 0.36, 0.15, 0.13, '#ffd84d');
+        ellipse(x - 0.15, fy - 0.36, 0.03, 0.025, '#e8c22c');
+        ellipse(x + 0.15, fy - 0.36, 0.03, 0.025, '#e8c22c');
+        ellipse(x + 0.04, fy - 0.5, 0.05, 0.022, '#5ab88a');
+        ey = fy - 0.38;
+        break;
+      case 'strawberry':
+        ctx.beginPath();
+        ctx.moveTo(x - 0.14, fy - 0.48);
+        ctx.quadraticCurveTo(x - 0.15, fy - 0.24, x, fy - 0.17);
+        ctx.quadraticCurveTo(x + 0.15, fy - 0.24, x + 0.14, fy - 0.48);
+        ctx.closePath();
+        finish('#e0304a');
+        for (const [dx, dy] of [[-0.07, -0.42], [0.06, -0.4], [0, -0.3], [-0.05, -0.26], [0.05, -0.26], [0.09, -0.34]]) ellipse(x + dx, fy + dy, 0.008, 0.012, '#ffe9a8', false);
+        poly([[x - 0.14, fy - 0.48], [x - 0.05, fy - 0.53], [x, fy - 0.6], [x + 0.05, fy - 0.53], [x + 0.14, fy - 0.48], [x, fy - 0.46]], '#3f9a5a');
+        ey = fy - 0.38;
+        break;
+      case 'pepper':
+        rrect(x - 0.12, fy - 0.52, 0.24, 0.34, 0.1, c2(v));
+        line(x, fy - 0.52, x + 0.03, fy - 0.62, '#3f9a5a', 0.03);
+        ey = fy - 0.38;
+        break;
+      case 'banana':
+        ctx.beginPath();
+        ctx.moveTo(x - 0.06, fy - 0.62);
+        ctx.quadraticCurveTo(x + 0.2, fy - 0.42, x + 0.02, fy - 0.17);
+        ctx.quadraticCurveTo(x + 0.08, fy - 0.42, x - 0.1, fy - 0.6);
+        ctx.closePath();
+        finish('#ffd84d');
+        ellipse(x - 0.08, fy - 0.61, 0.02, 0.015, '#6b4a2a');
+        ey = fy - 0.42;
+        break;
+      case 'pineapple':
+        for (const a of [-0.6, -0.3, 0, 0.3, 0.6]) { ctx.save(); ctx.translate(x, fy - 0.54); ctx.rotate(a); poly([[-0.025, 0], [0.025, 0], [0, -0.14]], '#3f9a5a'); ctx.restore(); }
+        ellipse(x, fy - 0.36, 0.13, 0.19, '#e8b92c');
+        for (let d = -0.12; d <= 0.12; d += 0.06) { line(x - 0.11, fy - 0.36 + d - 0.06, x + 0.11, fy - 0.36 + d + 0.06, '#b8862a', 0.01); line(x - 0.11, fy - 0.36 + d + 0.06, x + 0.11, fy - 0.36 + d - 0.06, '#b8862a', 0.01); }
+        ey = fy - 0.38;
+        break;
       default: // mushroom
         rrect(x - 0.06, fy - 0.38, 0.12, 0.2, 0.03, '#f4efe4');
         ctx.beginPath();
@@ -7998,13 +8139,40 @@
         for (const [dx, dy] of [[-0.08, -0.43], [0.05, -0.47], [0.1, -0.41], [-0.02, -0.5]]) ellipse(x + dx, fy + dy, 0.022, 0.018, '#fbfaf5', false);
         ey = fy - 0.29;
     }
-    // a panicked face and a little tie
+    return ey;
+  }
+
+  function drawVegFace(x, ey, open, o = {}) {
     ellipse(x - 0.035, ey, 0.022, 0.026, '#ffffff');
     ellipse(x + 0.035, ey, 0.022, 0.026, '#ffffff');
     ellipse(x - 0.03, ey + 0.004, 0.01, 0.012, INK, false);
     ellipse(x + 0.04, ey + 0.004, 0.01, 0.012, INK, false);
-    ellipse(x, ey + 0.055, 0.016, panic ? 0.022 : 0.012, '#7a1020');
+    if (o.shades) rrect(x - 0.07, ey - 0.025, 0.14, 0.045, 0.015, '#1d1c22', false);
+    ellipse(x, ey + 0.055, 0.016, open ? 0.022 : 0.012, '#7a1020');
+  }
+
+  function drawVeg(v, x, fy) {
+    const panic = Math.sin(clock * 9 + x * 4) > 0;
+    // legs and waving arms
+    line(x - 0.04, fy - 0.2, x - 0.06, fy, INK, 0.03);
+    line(x + 0.04, fy - 0.2, x + 0.06, fy, INK, 0.03);
+    ellipse(x - 0.07, fy - 0.01, 0.035, 0.015, INK, false);
+    ellipse(x + 0.07, fy - 0.01, 0.035, 0.015, INK, false);
+    line(x - 0.09, fy - 0.38, x - 0.18, panic ? fy - 0.54 : fy - 0.3, INK, 0.022);
+    line(x + 0.09, fy - 0.38, x + 0.18, panic ? fy - 0.3 : fy - 0.54, INK, 0.022);
+    const ey = drawVegBody(v, x, fy);
+    drawVegFace(x, ey, panic);
     poly([[x - 0.015, ey + 0.09], [x + 0.015, ey + 0.09], [x + 0.02, ey + 0.16], [x, ey + 0.18], [x - 0.02, ey + 0.16]], '#2f5fb3', false);
+  }
+
+  // A produce head on a person's body, for Punch Tower's bosses and coworkers.
+  function drawProduceHead(hx, hy, v, o = {}) {
+    ctx.save();
+    ctx.translate(hx, hy + 0.06);
+    ctx.scale(0.95, 0.95);
+    const ey = drawVegBody(v, 0, 0.38);
+    drawVegFace(0, ey, o.open, o);
+    ctx.restore();
   }
 
   // A ceiling fan hanging under a slab; once hit it dangles, bent.
@@ -8116,6 +8284,100 @@
         rrect(x - 0.09, fy - 0.73, 0.18, 0.05, 0.02, '#1d1c22', false);
         line(x - 0.05, fy - 0.6, x + 0.05, fy - 0.6, INK, 0.012);
         break;
+      case 'blender':
+        rrect(x - 0.1, fy - 0.12, 0.2, 0.12, 0.03, '#3b3f4a');
+        ellipse(x, fy - 0.06, 0.02, 0.02, blink(x, 3) ? '#5dff8a' : '#2a6a3a', false);
+        poly([[x - 0.09, fy - 0.12], [x + 0.09, fy - 0.12], [x + 0.1, fy - 0.46], [x - 0.1, fy - 0.46]], 'rgba(214,236,250,0.7)');
+        poly([[x - 0.085, fy - 0.14], [x + 0.085, fy - 0.14], [x + 0.09, fy - 0.3 - Math.sin(clock * 20 + x) * 0.02], [x - 0.09, fy - 0.3 + Math.sin(clock * 20 + x) * 0.02]], '#ff7a3d', false);
+        rrect(x - 0.11, fy - 0.5, 0.22, 0.05, 0.02, '#3b3f4a');
+        break;
+      case 'arcade':
+        rrect(x - 0.13, fy - 0.66, 0.26, 0.66, 0.02, c || '#6b8fe6');
+        rrect(x - 0.1, fy - 0.58, 0.2, 0.18, 0.01, '#15171d');
+        for (let i = 0; i < 3; i++) ellipse(x - 0.05 + i * 0.05, fy - 0.5 + Math.sin(clock * 6 + i) * 0.03, 0.015, 0.015, ['#ffd84d', '#ff6b8a', '#5dff8a'][i], false);
+        rrect(x - 0.12, fy - 0.36, 0.24, 0.06, 0.01, '#2a2d36');
+        ellipse(x - 0.05, fy - 0.35, 0.018, 0.018, '#e04a55', false);
+        ellipse(x + 0.05, fy - 0.35, 0.018, 0.018, '#ffd84d', false);
+        rrect(x - 0.13, fy - 0.7, 0.26, 0.06, 0.01, '#ffd84d');
+        break;
+      case 'stall':
+        line(x - 0.27, fy - 0.6, x - 0.27, fy, '#8a5a3b', 0.03);
+        line(x + 0.27, fy - 0.6, x + 0.27, fy, '#8a5a3b', 0.03);
+        for (let i = 0; i < 6; i++) poly([[x - 0.3 + i * 0.1, fy - 0.6], [x - 0.2 + i * 0.1, fy - 0.6], [x - 0.2 + i * 0.1, fy - 0.5], [x - 0.25 + i * 0.1, fy - 0.46], [x - 0.3 + i * 0.1, fy - 0.5]], i % 2 ? '#fbfaf5' : (c || '#e66b6b'));
+        rrect(x - 0.28, fy - 0.26, 0.56, 0.26, 0.02, '#c9965f');
+        for (let i = 0; i < 7; i++) ellipse(x - 0.22 + i * 0.075, fy - 0.29, 0.04, 0.04, ['#e0403a', '#ffb33d', '#7cc58f', '#ffd84d', '#9b6be6'][i % 5]);
+        break;
+      case 'crate':
+        rrect(x - 0.16, fy - 0.2, 0.32, 0.2, 0.01, '#c9965f');
+        line(x - 0.16, fy - 0.1, x + 0.16, fy - 0.1, '#8a5a3b', 0.012);
+        for (let i = 0; i < 4; i++) ellipse(x - 0.11 + i * 0.075, fy - 0.22, 0.045, 0.045, c === '#f2c14e' ? '#ffd84d' : c === '#5ab88a' ? '#7cc58f' : '#e0403a');
+        break;
+      case 'cart':
+        line(x - 0.18, fy - 0.36, x - 0.12, fy - 0.36, INK, 0.02);
+        poly([[x - 0.14, fy - 0.34], [x + 0.18, fy - 0.34], [x + 0.14, fy - 0.12], [x - 0.1, fy - 0.12]], 'rgba(200,205,215,0.85)');
+        for (let i = 0; i < 4; i++) line(x - 0.08 + i * 0.07, fy - 0.33, x - 0.06 + i * 0.06, fy - 0.13, '#8a8f99', 0.008);
+        ellipse(x - 0.06, fy - 0.04, 0.035, 0.035, INK);
+        ellipse(x + 0.11, fy - 0.04, 0.035, 0.035, INK);
+        ellipse(x + 0.02, fy - 0.38, 0.06, 0.05, '#7cc58f');
+        ellipse(x + 0.1, fy - 0.37, 0.04, 0.04, '#ffb33d');
+        break;
+      case 'balloons':
+        line(x, fy - 0.02, x, fy - 0.4, '#5a3a24', 0.02);
+        rrect(x - 0.05, fy - 0.06, 0.1, 0.06, 0.01, '#5a3a24');
+        for (const [bx, by, col] of [[-0.08, -0.62, '#ff6b8a'], [0.07, -0.66, '#ffd84d'], [0, -0.74, '#5dc9ff'], [-0.04, -0.52, '#7cc58f'], [0.08, -0.5, '#b48be0']]) {
+          line(x, fy - 0.4, x + bx, fy + by + 0.07, 'rgba(42,39,51,0.5)', 0.006);
+          ellipse(x + bx, fy + by + Math.sin(clock * 2 + bx * 20) * 0.01, 0.055, 0.07, col);
+        }
+        break;
+      case 'bed':
+        rrect(x - 0.31, fy - 0.32, 0.06, 0.32, 0.01, '#6b3f22');
+        rrect(x - 0.28, fy - 0.18, 0.58, 0.12, 0.02, '#fbfaf5');
+        rrect(x - 0.27, fy - 0.24, 0.16, 0.08, 0.03, '#ffffff');
+        rrect(x - 0.1, fy - 0.2, 0.4, 0.06, 0.02, c || '#6b8fe6', false);
+        line(x - 0.26, fy - 0.06, x - 0.26, fy, INK, 0.02);
+        line(x + 0.28, fy - 0.06, x + 0.28, fy, INK, 0.02);
+        break;
+      case 'luggage':
+        line(x - 0.15, fy - 0.56, x - 0.15, fy - 0.04, '#e0b84a', 0.02);
+        line(x + 0.15, fy - 0.56, x + 0.15, fy - 0.04, '#e0b84a', 0.02);
+        ctx.beginPath();
+        ctx.arc(x, fy - 0.56, 0.15, Math.PI, 0);
+        ctx.lineWidth = 0.02;
+        ctx.strokeStyle = '#e0b84a';
+        ctx.stroke();
+        rrect(x - 0.16, fy - 0.06, 0.32, 0.03, 0.01, '#e0b84a');
+        rrect(x - 0.12, fy - 0.3, 0.14, 0.24, 0.02, c || '#e66b6b');
+        rrect(x + 0.01, fy - 0.22, 0.11, 0.16, 0.02, '#5b6170');
+        rrect(x - 0.09, fy - 0.44, 0.17, 0.13, 0.02, '#c9965f');
+        ellipse(x - 0.12, fy - 0.01, 0.025, 0.025, INK);
+        ellipse(x + 0.12, fy - 0.01, 0.025, 0.025, INK);
+        break;
+      case 'cloche':
+        rrect(x - 0.15, fy - 0.2, 0.3, 0.03, 0.01, '#fbfaf5');
+        line(x - 0.12, fy - 0.17, x - 0.12, fy, '#9aa0aa', 0.015);
+        line(x + 0.12, fy - 0.17, x + 0.12, fy, '#9aa0aa', 0.015);
+        ctx.beginPath();
+        ctx.ellipse(x, fy - 0.2, 0.11, 0.12, 0, Math.PI, 0);
+        ctx.closePath();
+        finish('#d9dce3');
+        ellipse(x, fy - 0.33, 0.015, 0.015, '#9aa0aa');
+        ellipse(x - 0.04, fy - 0.26, 0.025, 0.04, 'rgba(255,255,255,0.6)', false);
+        break;
+      case 'treadmill':
+        rrect(x - 0.25, fy - 0.08, 0.5, 0.08, 0.03, '#2a2d36');
+        line(x - 0.22, fy - 0.04, x + 0.2, fy - 0.04, (Math.floor(clock * 8) % 2) ? '#5b6170' : '#3b3f4a', 0.02);
+        line(x + 0.2, fy - 0.08, x + 0.24, fy - 0.42, '#5b6170', 0.025);
+        rrect(x + 0.15, fy - 0.46, 0.14, 0.06, 0.01, '#3b3f4a');
+        ellipse(x + 0.2, fy - 0.43, 0.012, 0.012, blink(x, 2) ? '#ff6b6b' : '#5dff8a', false);
+        break;
+      case 'weights':
+        rrect(x - 0.22, fy - 0.36, 0.04, 0.36, 0.01, '#3b3f4a');
+        rrect(x + 0.18, fy - 0.36, 0.04, 0.36, 0.01, '#3b3f4a');
+        for (const ry of [-0.32, -0.18]) {
+          line(x - 0.2, fy + ry, x + 0.2, fy + ry, '#9aa0aa', 0.015);
+          for (let i = 0; i < 3; i++) { const dx = -0.12 + i * 0.12; rrect(x + dx - 0.04, fy + ry - 0.04, 0.025, 0.08, 0.01, c || '#e66b6b'); rrect(x + dx + 0.015, fy + ry - 0.04, 0.025, 0.08, 0.01, c || '#e66b6b'); line(x + dx - 0.02, fy + ry, x + dx + 0.02, fy + ry, '#9aa0aa', 0.012); }
+        }
+        break;
       case 'puddle':
         // a big glowing bowl of punch: steer into it for a boost
         ctx.save();
@@ -8136,23 +8398,50 @@
     }
   }
 
-  // The haul piled on the desk, and the same haul raining back down.
+  // Where each link of the tail is: spaced out along the path the desk took.
+  function tailSpots() {
+    const out = [];
+    if (!run || !run.pile.length) return out;
+    const tr = run.trail;
+    let want = TAIL_GAP * 0.8, len = 0;
+    let px = run.x, py = run.y;
+    for (let i = tr.length - 1; i >= 0 && out.length < run.pile.length; i--) {
+      const qx = tr[i].x, qy = tr[i].y;
+      const seg = Math.hypot(qx - px, qy - py);
+      while (seg > 0 && len + seg >= want && out.length < run.pile.length) {
+        const k = (want - len) / seg;
+        out.push({ x: px + (qx - px) * k, y: py + (qy - py) * k });
+        want += TAIL_GAP;
+      }
+      len += seg;
+      px = qx; py = qy;
+    }
+    while (out.length < run.pile.length) out.push({ x: px, y: py + (out.length + 1) * 0.05 });
+    return out;
+  }
+
+  // The haul trailing behind the desk like a snake, and raining back down.
   function drawRunPile() {
     if (run && !run.over && run.pile.length) {
-      const topY = run.y - DESK_H;
-      ctx.save();
-      ctx.translate(run.x, topY);
-      ctx.rotate(run.ang);
-      run.pile.forEach((p, i) => {
-        const row = Math.floor(i / 5);
+      const at = tailSpots();
+      // a rope of punch joining the links
+      ctx.beginPath();
+      ctx.moveTo(run.x, run.y);
+      for (const q of at) ctx.lineTo(q.x, q.y + 0.1);
+      ctx.lineWidth = 0.06;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(224,48,74,0.5)';
+      ctx.stroke();
+      for (let i = at.length - 1; i >= 0; i--) {
+        const p = run.pile[i], q = at[i];
         ctx.save();
-        ctx.translate(p.ox * (reachOf() - 0.25) * (1 - row * 0.08), -row * 0.1 - 0.05);
-        ctx.rotate(p.a);
-        ctx.scale(0.55, 0.55);
+        ctx.translate(q.x, q.y + 0.35);
+        ctx.rotate(p.a + Math.sin(clock * 6 + p.wig + i * 0.7) * 0.25);
+        ctx.scale(0.9, 0.9);
         drawThing(p.kind, 0, 0.2, p.c);
         ctx.restore();
-      });
-      ctx.restore();
+      }
     }
     for (const r of rain) {
       ctx.save();
@@ -8187,10 +8476,10 @@
         ctx.scale(0.001, 0.001);
         ctx.font = '900 110px ui-rounded, system-ui, sans-serif';
         ctx.fillStyle = '#e0304a';
-        ctx.fillText('PUNCH TOWER', 0, 0);
+        ctx.fillText(building.name, 0, 0);
         ctx.font = '700 46px ui-rounded, system-ui, sans-serif';
         ctx.fillStyle = 'rgba(42,39,51,0.6)';
-        ctx.fillText('Home of the Uppercut · Est. 1987', 0, 70);
+        ctx.fillText(building.sub, 0, 70);
         ctx.restore();
         rrect(towerL() - 20, floorY, TOWER_W + 40, Hm * 4, 0, '#c9b28f', false);
         ctx.fillStyle = 'rgba(0,0,0,0.06)';
@@ -8505,7 +8794,7 @@
   window.flippyDesk = {
     flip: (s = 1.2) => flip(s, 1, 0),
     get state() { return state; },
-    run: () => run && { why: run.why, pile: run.pile.length, x: run.x, slab: run.slab, vy: run.vy, over: run.over },
+    run: () => run && { why: run.why, pile: run.pile.length, bld: building.name, x: run.x, slab: run.slab, vy: run.vy, over: run.over },
     bowl: () => {
       // the screen x of the next punch bowl above the desk, for testing
       if (!run || run.over || !bldg) return null;
