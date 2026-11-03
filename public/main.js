@@ -4375,27 +4375,27 @@
   // time. Mouse World keeps its own bank and its own mouse-sized arsenal.
 
   const WEAPONS = [
-    { id: 'sword', name: 'Broadsword', icon: '\u{1F5E1}️', price: 10000, blurb: 'One mighty overhead swing. The desk comes apart in two.' },
-    { id: 'grenade', name: 'Frag grenade', icon: '\u{1F4A3}', price: 30000, blurb: 'Pull the pin, lob it on the desk, take cover.' },
-    { id: 'laser', name: 'Laser cannon', icon: '⚡', price: 75000, blurb: 'Slices the desk clean through and sets both halves ablaze.' },
-    { id: 'nuke', name: 'Tactical nuke', icon: '☢️', price: 150000, blurb: 'Slid under the desk. It beeps. Then it doesn’t.' },
+    { id: 'sword', name: 'Broadsword', icon: '\u{1F5E1}️', price: 10000, blurb: 'One mighty overhead swing. The desk comes apart in two.', lore: 'Twice the flipping, half the effort. Your half.' },
+    { id: 'grenade', name: 'Frag grenade', icon: '\u{1F4A3}', price: 30000, blurb: 'Pull the pin, lob it on the desk, take cover.', lore: 'Flips the desk for you. All you have to do is stand somewhere else.' },
+    { id: 'laser', name: 'Laser cannon', icon: '⚡', price: 75000, blurb: 'Slices the desk clean through and sets both halves ablaze.', lore: 'Aims itself. You can keep your hand on it if you like.' },
+    { id: 'nuke', name: 'Tactical nuke', icon: '☢️', price: 150000, blurb: 'Slid under the desk. It beeps. Then it doesn’t.', lore: 'Flips every desk at once. It’s unclear what you do now.' },
   ];
   const MOUSE_WEAPONS = [
-    { id: 'catapult', name: 'Cheese catapult', icon: '\u{1F944}', price: 10000, blurb: 'A spoon, a pencil and six wheels of gouda, fired at everything on the desk.' },
-    { id: 'termites', name: 'Termite swarm', icon: '\u{1F41C}', price: 30000, blurb: 'They pour out of the hole and eat the desk down to sawdust.' },
-    { id: 'paw', name: 'The cat', icon: '\u{1F43E}', price: 75000, blurb: 'Risky. One giant paw swats the whole desk across the room.' },
-    { id: 'flood', name: 'The Flood', icon: '\u{1F30A}', price: 150000, blurb: 'Someone left the tap on. Everything floats. The computers do not survive.' },
+    { id: 'catapult', name: 'Cheese catapult', icon: '\u{1F944}', price: 10000, blurb: 'A spoon, a pencil and six wheels of gouda, fired at everything on the desk.', lore: 'Built by mice, for mice. You are welcome to watch.' },
+    { id: 'termites', name: 'Termite swarm', icon: '\u{1F41C}', price: 30000, blurb: 'They pour out of the hole and eat the desk down to sawdust.', lore: 'They work around the clock and have never once asked for your help.' },
+    { id: 'paw', name: 'The cat', icon: '\u{1F43E}', price: 75000, blurb: 'Risky. One giant paw swats the whole desk across the room.', lore: 'The cat doesn’t need you either, but at least it’s honest about it.' },
+    { id: 'flood', name: 'The Flood', icon: '\u{1F30A}', price: 150000, blurb: 'Someone left the tap on. Everything floats. The computers do not survive.', lore: 'Flips the desk, the room and the mice. You can still swipe, if it helps.' },
   ];
   const MOUSE_MOVED = { sword: 'catapult', grenade: 'termites', laser: 'paw', nuke: 'flood' };
   // The robot world's armory sells upgrades for the shotgun and bigger guns
   // to swap it for. Upgrades work on every gun.
   const ROBOT_ARMS = [
-    { id: 'pump', gear: 'upgrade', name: 'Hydraulic pump', icon: '\u{1F527}', price: 12000, blurb: 'Upgrade. The gun racks itself: every gun fires twice as fast.' },
-    { id: 'choke', gear: 'upgrade', name: 'Wide choke', icon: '\u{1F3AF}', price: 25000, blurb: 'Upgrade. A much wider spread. Hard to miss now.' },
-    { id: 'shells', gear: 'upgrade', name: 'Explosive shells', icon: '\u{1F9E8}', price: 45000, blurb: 'Upgrade. Every hit goes off and takes the neighbors with it.' },
-    { id: 'minigun', gear: 'gun', name: 'Minigun', icon: '\u{1F300}', price: 80000, blurb: 'Hold to spray. Six barrels, no patience.' },
-    { id: 'plasma', gear: 'gun', name: 'Plasma rifle', icon: '\u{1F52E}', price: 120000, blurb: 'A beam that goes through everything in a line, and keeps going.' },
-    { id: 'rocket', gear: 'gun', name: 'Rocket launcher', icon: '\u{1F680}', price: 180000, blurb: 'One rocket, one very large hole in the air.' },
+    { id: 'pump', gear: 'upgrade', name: 'Hydraulic pump', icon: '\u{1F527}', price: 12000, blurb: 'Upgrade. The gun racks itself: every gun fires twice as fast.', lore: 'Pulling the trigger is now optional, but encouraged.' },
+    { id: 'choke', gear: 'upgrade', name: 'Wide choke', icon: '\u{1F3AF}', price: 25000, blurb: 'Upgrade. A much wider spread. Hard to miss now.', lore: 'Engineers are working on impossible to miss.' },
+    { id: 'shells', gear: 'upgrade', name: 'Explosive shells', icon: '\u{1F9E8}', price: 45000, blurb: 'Upgrade. Every hit goes off and takes the neighbors with it.', lore: 'Your role in this has been reviewed, and kept, for now.' },
+    { id: 'minigun', gear: 'gun', name: 'Minigun', icon: '\u{1F300}', price: 80000, blurb: 'Hold to spray. Six barrels, no patience.', lore: 'Fires itself. The trigger is decorative, for morale.' },
+    { id: 'plasma', gear: 'gun', name: 'Plasma rifle', icon: '\u{1F52E}', price: 120000, blurb: 'A beam that goes through everything in a line, and keeps going.', lore: 'Keeps going after you let go. It always did.' },
+    { id: 'rocket', gear: 'gun', name: 'Rocket launcher', icon: '\u{1F680}', price: 180000, blurb: 'One rocket, one very large hole in the air.', lore: 'Finds the target on its own. Please continue to point.' },
   ];
   const SHOTGUN = { id: 'shotgun', gear: 'gun', name: 'Shotgun', icon: '\u{1F4A5}' };
   let gunId = 'shotgun';
@@ -4405,10 +4405,10 @@
   let rockets = [];           // rockets on the way: { sx, sy, tx, ty, t }
   // Punch Pitcher's gym sells upgrades for the uppercut.
   const PUNCH_ARMS = [
-    { id: 'sugar', gear: 'upgrade', name: 'Sugar rush', icon: '\u{1F36C}', price: 12000, blurb: 'A harder uppercut: the desk leaves a third faster.' },
-    { id: 'ice', gear: 'upgrade', name: 'Ice cube shield', icon: '\u{1F9CA}', price: 25000, blurb: 'Smashes through the first steel beam at full speed.' },
-    { id: 'party', gear: 'upgrade', name: 'Party size', icon: '\u{1F389}', price: 45000, blurb: 'A desk half again as wide hits half again as much.' },
-    { id: 'straw', gear: 'upgrade', name: 'Magnet straw', icon: '\u{1F9F2}', price: 80000, blurb: 'Slurps up anything within reach on the way past.' },
+    { id: 'sugar', gear: 'upgrade', name: 'Sugar rush', icon: '\u{1F36C}', price: 12000, blurb: 'A harder uppercut: the desk leaves a third faster.', lore: 'He’s faster now. Try to keep up, or don’t. He’ll manage.' },
+    { id: 'ice', gear: 'upgrade', name: 'Ice cube shield', icon: '\u{1F9CA}', price: 25000, blurb: 'Smashes through the first steel beam at full speed.', lore: 'Handles the beams for you. You were going to steer around them, which was sweet.' },
+    { id: 'party', gear: 'upgrade', name: 'Party size', icon: '\u{1F389}', price: 45000, blurb: 'A desk half again as wide hits half again as much.', lore: 'Hits half again as much. Your half stays the same.' },
+    { id: 'straw', gear: 'upgrade', name: 'Magnet straw', icon: '\u{1F9F2}', price: 80000, blurb: 'Slurps up anything within reach on the way past.', lore: 'Grabs things for you. Keep swiping, it helps him feel supported.' },
   ];
   // What stands on each floor of the tower, and what it's worth to hit.
   const PUNCH_THINGS = {
@@ -4538,6 +4538,11 @@
       const blurb = document.createElement('span');
       blurb.textContent = w.blurb;
       info.append(name, blurb);
+      if (w.lore) {
+        const lore = document.createElement('i');
+        lore.textContent = w.lore;
+        info.append(lore);
+      }
       const btn = document.createElement('button');
       btn.type = 'button';
       if (has(w.id)) {

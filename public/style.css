@@ -251,6 +251,7 @@ html, body {
 #store li div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 #store li b { font-size: 16px; font-weight: 800; }
 #store li span { font-size: 13px; font-weight: 600; opacity: 0.7; }
+#store li i { font-size: 12px; font-weight: 500; opacity: 0.55; }
 #store li small { font-size: 12px; font-weight: 700; color: #c2410c; }
 #store li button {
   flex: none;
